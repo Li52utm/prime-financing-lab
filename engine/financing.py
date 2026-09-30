@@ -4,9 +4,10 @@ Routes: on-sheet prime brokerage (PB), total return swap (TRS), collateral upgra
 
 Scope and simplifications:
 - Static notional. Price moves and variation margin are ignored.
-- Balance sheet figures are accounting proxies only. No regulatory treatment here;
-  illustrative leverage exposure / RWA arrive in engine/capital.py (step 2).
-- The collateral-upgrade balance sheet of 0 is a PLACEHOLDER. Step 2 replaces it.
+- Balance sheet figures here are accounting balance sheet only. The headline balance-sheet
+  metric is return on leverage exposure in engine/capital.py (illustrative).
+- The collateral upgrade is off the accounting balance sheet (securities for securities),
+  so its ROBS here is None. Its real leverage exposure is in engine/capital.py.
 
 Conventions: GBP, ACT/365, rates and spreads as decimals. Costs are GBP over the tenor.
 """
@@ -93,7 +94,7 @@ class RouteResult:
     financing_cost_ex_sdrt: float
     dealer_net: float
     balance_sheet: float
-    balance_sheet_is_placeholder: bool
+    balance_sheet_off_sheet: bool
     shadow_cost: float  # reported separately; NOT deducted from ROBS
     robs: float | None  # gross annualised return on balance sheet
     spread_name: str  # the dealer pricing lever for this route
@@ -215,7 +216,7 @@ def pb_route(x: FinancingInputs) -> RouteResult:
         financing_cost_ex_sdrt=financing_cost - sdrt,
         dealer_net=dealer_net,
         balance_sheet=loan,
-        balance_sheet_is_placeholder=False,
+        balance_sheet_off_sheet=False,
         shadow_cost=shadow_bs_cost(loan, x.shadow_cost_k, tau),
         robs=robs(dealer_net, loan, tau),
         spread_name="pb_spread",
@@ -251,7 +252,7 @@ def trs_route(x: FinancingInputs) -> RouteResult:
         financing_cost_ex_sdrt=financing_cost,
         dealer_net=dealer_net,
         balance_sheet=x.notional,
-        balance_sheet_is_placeholder=False,
+        balance_sheet_off_sheet=False,
         shadow_cost=shadow_bs_cost(x.notional, x.shadow_cost_k, tau),
         robs=robs(dealer_net, x.notional, tau),
         spread_name="trs_spread",
@@ -279,9 +280,9 @@ def upgrade_route(x: FinancingInputs) -> RouteResult:
     dealer_net = (fee - gilts * x.gilt_borrow_fee * tau
                   + net_dividend(gross_div, x.wht_dealer) - manufactured)
 
-    # PLACEHOLDER: a securities-for-securities trade is treated as off accounting balance
-    # sheet. Step 2 replaces this with an illustrative leverage exposure. Until then,
-    # ROBS and the required fee are undefined (None).
+    # Off the accounting balance sheet (securities for securities), so accounting ROBS and
+    # its required fee are None. The leverage exposure, which depends on how the dealer
+    # sources the gilts, comes from engine.capital.upgrade_capital.
     balance_sheet = 0.0
 
     return RouteResult(
@@ -294,7 +295,7 @@ def upgrade_route(x: FinancingInputs) -> RouteResult:
         financing_cost_ex_sdrt=financing_cost - sdrt,
         dealer_net=dealer_net,
         balance_sheet=balance_sheet,
-        balance_sheet_is_placeholder=True,
+        balance_sheet_off_sheet=True,
         shadow_cost=shadow_bs_cost(balance_sheet, x.shadow_cost_k, tau),
         robs=robs(dealer_net, balance_sheet, tau),
         spread_name="upgrade_fee",
@@ -343,7 +344,7 @@ def compare_routes(x: FinancingInputs) -> pd.DataFrame:
             "sdrt_amortised_gbp": r.sdrt,
             "dealer_net_gbp": r.dealer_net,
             "balance_sheet_gbp": r.balance_sheet,
-            "balance_sheet_note": "PLACEHOLDER (step 2)" if r.balance_sheet_is_placeholder else "",
+            "balance_sheet_note": "off-sheet: see leverage exposure" if r.balance_sheet_off_sheet else "",
             "shadow_cost_gbp": r.shadow_cost,
             "robs_gross": r.robs,
             "spread_name": r.spread_name,

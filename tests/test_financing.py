@@ -226,12 +226,12 @@ def test_upgrade_sdrt_amortised():
     assert upgrade_route(base(holding_period_days=365)).financing_cost == approx(100_720)
 
 
-def test_upgrade_dealer_and_placeholder_balance_sheet():
+def test_upgrade_dealer_and_off_sheet_balance_sheet():
     # fee 6,000 - gilt borrow 9m x 0.1% x 0.2 = 1,800 -> 4,200; dividend leg 100,000 - 100,000 = 0
     r = upgrade_route(base())
     assert r.dealer_net == approx(4_200)
     assert r.balance_sheet == 0.0
-    assert r.balance_sheet_is_placeholder
+    assert r.balance_sheet_off_sheet
     assert r.robs is None
     assert r.required_spread is None
     assert r.shadow_cost == 0.0
@@ -265,7 +265,7 @@ def test_compare_routes_table():
     assert df.loc["PB", "net_cost_bp"] == approx(230)  # 46,000 / 2m
     assert df.loc["PB", "financing_cost_ex_sdrt_bp"] == approx(480)  # 96,000 / 2m
     assert df.loc["TRS", "financing_cost_bp"] == approx(530)  # 106,000 / 2m
-    assert df.loc["Collateral upgrade", "balance_sheet_note"] == "PLACEHOLDER (step 2)"
+    assert df.loc["Collateral upgrade", "balance_sheet_note"] == "off-sheet: see leverage exposure"
 
 
 def test_default_inputs_from_assumptions():
