@@ -38,13 +38,33 @@ All numbers are illustrative. They use public data and the author's own assumpti
 
 All presets and shocks are **hypothetical own assumptions** in `assumptions.py`. They are not forecasts.
 
-- **Price shock:** the stock move feeds the TRS mark-to-market V. The page shows replacement cost, multiplier, EAD, RWA and leverage exposure. Only V moves; the hedge and street repo stay at the static notional.
-- **Presets:** `quarter_end_squeeze`, `year_end_turn` and `collateral_shortage`. Each one shocks the client spread, the street spread, the shadow cost k and the street haircut.
-- **Pass-through lag:** the TRS spread reprices fully at once. The on-sheet PB spread reprices by a fraction per month (default 25%, capped at 100%). The dealer's street costs are hit immediately. The page shows the month-by-month client cost gap (PB − TRS) and the dealer's PB shortfall.
-- **Term vs rolling:** the dealer's street funding either locks a term spread (base + term premium) or rolls and pays the shock for the turn days. The page shows the breakeven term premium = shock × turn days / horizon.
-- **Limitation:** the upgrade's dealer net has no street funding line. Its only costs are the fee and gilt borrow, so street shocks don't reach it and it gains from the client repricing.
+- **Price shock:** a stock move m sets the TRS mark-to-market V = −N·m. It also scales three things by (1 + m):
+  - the hedge stock value
+  - the street repo collateral
+  - the SA-CCR adjusted notional. Under PRA CCR (CRR) Art 279b(1)(c), an equity adjusted notional is market price × number of units. A TRS expressed as a fixed GBP notional keeps its notional; this is a toggle, and the default is a TRS on a number of shares.
 
-### Not modelled
+  The street repo cash and the client's IM stay at their original amounts. The page shows RC, multiplier, EAD, RWA and leverage exposure.
+- **Presets:** `quarter_end_squeeze`, `year_end_turn` and `collateral_shortage`. Each one shocks:
+  - the client spread
+  - the street spread
+  - the shadow cost k
+  - the street haircut
+  - the gilt borrow fee
+- **Pass-through lag:** the TRS spread reprices fully at once. The on-sheet PB spread reprices by a fraction per month (default 25%, capped at 100%). The dealer's street costs are hit immediately. The page shows the month-by-month client cost gap (PB − TRS) and the dealer's PB shortfall.
+  - After PB has fully repriced, the gap does **not** return to its pre-shock level. PB reprices on its loan L = N(1 − margin) and the TRS on the full N, so the gap = base gap − (N − L) × client shock × τ.
+- **Term vs rolling:** the dealer's street funding either locks a term spread (base + term premium) or rolls and pays the shock for the turn days. The page shows the breakeven term premium = shock × turn days / horizon.
+
+## Collateral upgrade dealer P&L
+
+The upgrade's dealer P&L matches the capital model's gilt source.
+- **`reverse_repo`:** the dealer earns the fee; pays street funding on the repo of the client's equities; earns the gilt reverse-repo rate on R = G(1 − gilt haircut); earns SONIA on any surplus cash (or pays for a shortfall); and pays the gilt borrow fee.
+- **`borrowed` / `inventory`:** fee minus gilt borrow.
+
+## Hurdle clearance
+
+Each route reports whether its gross RoLE clears the hurdle k, and by how many bp of spread (current spread − required spread). The Summary page names a "best for desk" route only among routes that clear. If none clears, it says so.
+
+## Not modelled
 
 - **CVA risk capital: NOT MODELLED.**
 - Market risk on the delta-hedged stock

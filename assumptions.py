@@ -229,6 +229,9 @@ DEFAULT_GILT_SOURCE = "reverse_repo"  # one of reverse_repo, borrowed, inventory
 DEFAULT_SURPLUS_CASH_PLACEMENT = "central_bank"
 TRS_MARGINED = False  # unmargined by default; IM held as NICA
 TRS_MTM = 0.0  # dealer-side mark-to-market V at the calculation date
+# Own assumption: the TRS references a number of shares, so its SA-CCR adjusted notional
+# moves with the price (PRA CCR (CRR) Art 279b(1)(c)). False = fixed GBP notional.
+TRS_NOTIONAL_IN_UNITS = True
 
 # --- Targets ------------------------------------------------------------------------
 # Own assumption: gross annual return on RWA the desk needs.
@@ -251,6 +254,7 @@ PRICE_SHOCK_GRID = [-0.30, -0.20, -0.10, 0.0, 0.10, 0.20]
 # street_haircut_change  change in the street repo haircut on equities
 # turn_days              how long a roller pays the street spread shock (term vs rolling)
 # term_premium           extra spread a term lender charges over the whole horizon to lock
+# gilt_borrow_shock      rise in the dealer's gilt borrow fee (collateral upgrade sourcing)
 STRESS_PRESETS = {
     "quarter_end_squeeze": {
         "label": "Quarter-end squeeze (hypothetical)",
@@ -260,6 +264,7 @@ STRESS_PRESETS = {
         "street_haircut_change": 0.00,
         "turn_days": 5,
         "term_premium": 0.0002,
+        "gilt_borrow_shock": 0.0005,
     },
     "year_end_turn": {
         "label": "Year-end turn (hypothetical)",
@@ -269,6 +274,7 @@ STRESS_PRESETS = {
         "street_haircut_change": 0.02,
         "turn_days": 10,
         "term_premium": 0.0006,
+        "gilt_borrow_shock": 0.0015,
     },
     "collateral_shortage": {
         "label": "Collateral shortage (hypothetical)",
@@ -278,6 +284,7 @@ STRESS_PRESETS = {
         "street_haircut_change": 0.05,
         "turn_days": 30,
         "term_premium": 0.0010,
+        "gilt_borrow_shock": 0.0030,
     },
 }
 

@@ -31,7 +31,7 @@ def base(**overrides) -> FinancingInputs:
         pb_margin=0.20, trs_im=0.15, street_haircut=0.10,
         pb_spread=0.005, trs_spread=0.004, street_repo_spread=0.003,
         upgrade_haircut=0.10, upgrade_fee=0.003, aim_listed=False,
-        gilt_repo_spread=0.0, gilt_haircut=0.02, gilt_borrow_fee=0.001,
+        gilt_source="borrowed", gilt_repo_spread=0.0, gilt_haircut=0.02, gilt_borrow_fee=0.001,
         dividend=0.01, ex_div_day=30, trs_pass_through=0.9, manufactured_pass_through=1.0,
         wht_client=0.0, wht_dealer=0.0, include_sdrt=True, sdrt_rate=0.005,
         dealer_hedge_sdrt_rate=0.0, shadow_cost_k=0.02,
@@ -298,6 +298,7 @@ def test_dealer_parts_trs():
     p = trs_route(base()).dealer_parts
     assert p == approx({"sonia_from_client": 80_000, "spread_income": 8_000,
                         "street_funding": -77_400, "cash_gap": 4_000, "im_remuneration": 0.0,
+                        "gilt_reverse_repo": 0.0,
                         "dividend_pickup": 10_000, "hedge_sdrt": 0.0, "gilt_borrow": 0.0})
     assert sum(p.values()) == approx(24_600)
 
@@ -353,3 +354,33 @@ def test_breakeven_trs_spread_with_im_remuneration():
     s = breakeven_trs_spread(x)
     assert s == approx(0.025)
     assert trs_route(replace(x, trs_spread=s)).net_cost == approx(pb_route(x).net_cost)
+
+
+# --- Collateral upgrade dealer legs by gilt source --------------------------------------
+
+def test_upgrade_reverse_repo_dealer_parts():
+    # fee 10m x 0.3% x 0.2 = 6,000
+    # street: repo client equities for 9m at 4.3%: -9m x 0.043 x 0.2 = -77,400
+    # reverse repo: lend R = 9m x 0.98 = 8.82m at SONIA + 0: 8.82m x 0.04 x 0.2 = 70,560
+    # cash gap: surplus 9m - 8.82m = 0.18m earns 0.18m x 0.04 x 0.2 = 1,440
+    # gilt borrow: -9m x 0.1% x 0.2 = -1,800; dividend pickup 0
+    # total = 6,000 - 77,400 + 70,560 + 1,440 - 1,800 = -1,200
+    r = upgrade_route(base(gilt_source="reverse_repo"))
+    p = r.dealer_parts
+    assert p["spread_income"] == approx(6_000)
+    assert p["street_funding"] == approx(-77_400)
+    assert p["gilt_reverse_repo"] == approx(70_560)
+    assert p["cash_gap"] == approx(1_440)
+    assert p["gilt_borrow"] == approx(-1_800)
+    assert r.dealer_net == approx(-1_200)
+    assert r.balance_sheet == approx(9_000_000)  # 8.82m receivable + 0.18m surplus
+    assert not r.balance_sheet_off_sheet
+
+
+def test_upgrade_inventory_matches_borrowed_pnl():
+    assert upgrade_route(base(gilt_source="inventory")).dealer_net == approx(4_200)
+
+
+def test_upgrade_unknown_gilt_source():
+    with pytest.raises(ValueError):
+        upgrade_route(base(gilt_source="magic"))

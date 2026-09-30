@@ -39,7 +39,8 @@ class FinancingInputs:
     upgrade_fee: float
     aim_listed: bool
     # collateral upgrade gilt leg
-    gilt_repo_spread: float
+    gilt_source: str  # how the dealer sources the gilts: one of GILT_SOURCES
+    gilt_repo_spread: float  # gilt repo rate over SONIA (client's repo and dealer's reverse repo)
     gilt_haircut: float
     gilt_borrow_fee: float
     # dividends and tax
@@ -68,6 +69,7 @@ def default_inputs(asset_class: str = A.DEFAULT_ASSET_CLASS, tenor: str = A.DEFA
         unsecured_spread=A.DEALER_UNSECURED_SPREAD,
         im_remuneration_spread=A.IM_REMUNERATION_SPREAD,
         **A.ASSET_CLASSES[asset_class],
+        gilt_source=A.DEFAULT_GILT_SOURCE,
         gilt_repo_spread=A.GILT_REPO_SPREAD,
         gilt_haircut=A.GILT_HAIRCUT,
         gilt_borrow_fee=A.GILT_BORROW_FEE,
@@ -104,12 +106,15 @@ class RouteResult:
     required_spread: float | None  # spread at which gross ROBS == shadow_cost_k
 
 
+GILT_SOURCES = ("reverse_repo", "borrowed", "inventory")
+
 DEALER_PART_NAMES = (
     "sonia_from_client",  # SONIA leg received on the loan / TRS notional
     "spread_income",  # client spread or upgrade fee
     "street_funding",  # street repo at SONIA + street spread (negative)
     "cash_gap",  # surplus earns SONIA; shortfall pays SONIA + unsecured spread
     "im_remuneration",  # interest paid to the client on TRS cash IM (negative)
+    "gilt_reverse_repo",  # interest earned reversing in the upgrade gilts (reverse_repo source)
     "dividend_pickup",  # dividend kept net of WHT minus amount passed to the client
     "hedge_sdrt",  # SDRT on the dealer's TRS hedge (negative)
     "gilt_borrow",  # cost of sourcing gilts in the upgrade (negative)
@@ -304,7 +309,18 @@ def trs_route(x: FinancingInputs) -> RouteResult:
 def upgrade_route(x: FinancingInputs) -> RouteResult:
     """Collateral upgrade: the client buys the stock, lends it to the dealer for gilts
     G = N(1 - upgrade_haircut), and repos the gilts for cash C = G(1 - gilt_haircut).
-    The client funds the shortfall N - C itself."""
+    The client funds the shortfall N - C itself.
+
+    Dealer P&L depends on gilt_source (matching engine.capital.upgrade_capital):
+    - reverse_repo: earns the fee; repos the client's equities to the street for
+      N(1 - h_st) at SONIA + street spread; reverses in the gilts for R = G(1 - gilt_haircut)
+      at SONIA + gilt_repo_spread; the cash gap (raised - R) earns SONIA or costs
+      SONIA + unsecured spread; pays the gilt borrow fee on G (own assumption: sourcing
+      or specialness cost on top of the GC reverse repo rate).
+    - borrowed / inventory: fee minus gilt borrow fee on G (securities for securities).
+    """
+    if x.gilt_source not in GILT_SOURCES:
+        raise ValueError(f"Unknown gilt_source {x.gilt_source!r}; expected one of {GILT_SOURCES}")
     tau = year_fraction(x.tenor_days)
     gilts = x.notional * (1 - x.upgrade_haircut)
     cash = gilts * (1 - x.gilt_haircut)
@@ -317,17 +333,27 @@ def upgrade_route(x: FinancingInputs) -> RouteResult:
     gross_div = _dividend_amount(x)
     manufactured = x.manufactured_pass_through * gross_div
 
+    legs = {}
+    balance_sheet = 0.0
+    if x.gilt_source == "reverse_repo":
+        raised = x.notional * (1 - x.street_haircut)
+        cash_lent = gilts * (1 - x.gilt_haircut)
+        legs = {
+            "street_funding": -_street_repo_cost(x, tau),
+            "gilt_reverse_repo": cash_lent * (x.sonia + x.gilt_repo_spread) * tau,
+            "cash_gap": -funding_gap_cost(cash_lent - raised, x.sonia, x.unsecured_spread, tau),
+        }
+        # Accounting assets: reverse repo receivable plus any surplus cash.
+        balance_sheet = cash_lent + max(0.0, raised - cash_lent)
     parts = _dealer_parts(
         spread_income=fee,
         dividend_pickup=net_dividend(gross_div, x.wht_dealer) - manufactured,
         gilt_borrow=-gilts * x.gilt_borrow_fee * tau,
+        **legs,
     )
     dealer_net = sum(parts.values())
-
-    # Off the accounting balance sheet (securities for securities), so accounting ROBS and
-    # its required fee are None. The leverage exposure, which depends on how the dealer
-    # sources the gilts, comes from engine.capital.upgrade_capital.
-    balance_sheet = 0.0
+    # borrowed / inventory: off the accounting balance sheet (securities for securities),
+    # so accounting ROBS is None. Leverage exposure comes from engine.capital.upgrade_capital.
 
     return RouteResult(
         route="Collateral upgrade",
@@ -340,7 +366,7 @@ def upgrade_route(x: FinancingInputs) -> RouteResult:
         dealer_net=dealer_net,
         dealer_parts=parts,
         balance_sheet=balance_sheet,
-        balance_sheet_off_sheet=True,
+        balance_sheet_off_sheet=balance_sheet == 0.0,
         shadow_cost=shadow_bs_cost(balance_sheet, x.shadow_cost_k, tau),
         robs=robs(dealer_net, balance_sheet, tau),
         spread_name="upgrade_fee",

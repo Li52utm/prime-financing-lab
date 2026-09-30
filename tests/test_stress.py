@@ -18,6 +18,7 @@ from engine.stress import (
     price_shock_table, repricing_path, stress_comparison, term_vs_rolling,
     term_vs_rolling_by_preset,
 )
+from engine.capital import trs_capital
 from tests.test_capital import cap, fin
 
 approx = pytest.approx
@@ -57,31 +58,60 @@ def test_apply_preset():
 # --- 1. Price shock ------------------------------------------------------------------
 
 def test_price_shock_down_20pct():
-    # V = +2m; RC = 2m - 1.5m = 500,000; z > 0 -> multiplier 1
-    # EAD = 1.4 x (500,000 + 1,597,806.72) = 2,936,929.40
-    # RWA = 2,936,929.40 + 0.4 x 2,414,213.56 = 3,902,614.83
-    # leverage = 10m + 1.4 x (2m + 1,597,806.72) + 1m = 16,036,929.40
+    """Stock -20%: V = +2m; hedge and adjusted notional 10m x 0.8 = 8m (Art 279b(1)(c)).
+    AddOn = 0.32 x 8m x 0.49931460 = 1,278,245.37
+    RC = 2m - 1.5m = 500,000; z = +0.5m -> multiplier 1
+    EAD = 1.4 x (500,000 + 1,278,245.37) = 2,489,543.52
+    street E* = max(0, 8m x 1.14142136 - 9m) = 131,370.85 (repo cash stays 9m); x 0.4 = 52,548.34
+    RWA = 2,489,543.52 + 52,548.34 = 2,542,091.86
+    leverage = hedge 8m + 1.4 x (2m + 1,278,245.37) + max(0, 8m - 9m) = 12,589,543.52
+    """
     r = price_shock(fin(), cap(), -0.20)
     assert r["mtm_v"] == approx(2_000_000)
     assert r["rc"] == approx(500_000)
     assert r["multiplier"] == 1.0
-    assert r["ead"] == approx(2_936_929.40)
-    assert r["rwa"] == approx(3_902_614.83)
-    assert r["leverage_exposure"] == approx(16_036_929.40)
+    assert r["ead"] == approx(2_489_543.52)
+    assert r["rwa"] == approx(2_542_091.86)
+    assert r["leverage_exposure"] == approx(12_589_543.52)
 
 
 def test_price_shock_up_10pct():
-    # V = -1m; RC 0; multiplier 0.46694933; EAD 1,044,532.69; RWA + 965,685.42 = 2,010,218.12
+    """Stock +10%: V = -1m; hedge and adjusted notional 11m.
+    AddOn = 0.32 x 11m x 0.49931460 = 1,757,587.39
+    RC 0; z = -1m - 1.5m = -2.5m; multiplier = 0.05 + 0.95 exp(-2.5m / (1.9 x 1,757,587.39))
+      = 0.49936169; EAD = 1.4 x 0.49936169 x 1,757,587.39 = 1,228,740.52
+    street E* = 11m x 1.14142136 - 9m = 3,555,634.92; x 0.4 = 1,422,253.97
+    RWA = 2,650,994.49
+    leverage = 11m + 1.4 x 1,757,587.39 + (11m - 9m) = 15,460,622.34
+    """
     r = price_shock(fin(), cap(), 0.10)
     assert r["rc"] == 0.0
-    assert r["multiplier"] == approx(0.46694933)
-    assert r["ead"] == approx(1_044_532.69)
-    assert r["rwa"] == approx(2_010_218.12)
+    assert r["multiplier"] == approx(0.49936169)
+    assert r["ead"] == approx(1_228_740.52)
+    assert r["rwa"] == approx(2_650_994.49)
+    assert r["leverage_exposure"] == approx(15_460_622.34)
+
+
+def test_price_shock_fixed_gbp_notional():
+    # TRS expressed as a GBP notional: adjusted notional stays 10m (Art 279b(1)(c) second limb)
+    # -20%: EAD = 1.4 x (500,000 + 1,597,806.72) = 2,936,929.40
+    r = price_shock(fin(), cap(trs_notional_in_units=False), -0.20)
+    assert r["ead"] == approx(2_936_929.40)
 
 
 def test_price_shock_margined_absorbed_by_vm():
-    # full daily VM: EAD stays at 628,212.85 whatever the move
-    assert price_shock(fin(), cap(trs_margined=True), -0.20)["ead"] == approx(628_212.85)
+    """Margined, -20%: VM 2m absorbs V; z = -1.5m. AddOn = 0.32 x 8m x 0.3 = 768,000
+    multiplier = 0.05 + 0.95 exp(-1.5m / (1.9 x 768,000)) = 0.38984902
+    EAD = 1.4 x 0.38984902 x 768,000 = 419,165.67"""
+    assert price_shock(fin(), cap(trs_margined=True), -0.20)["ead"] == approx(419_165.67)
+
+
+def test_trs_t_account_balances_after_shock():
+    for margined in (False, True):
+        for m in (-0.2, 0.1):
+            c = cap(trs_margined=margined, trs_mtm=-10e6 * m, trs_price_move=m)
+            ta = trs_capital(fin(), c).t_account
+            assert sum(ta["assets"].values()) == approx(sum(ta["liabilities"].values()))
 
 
 def test_price_shock_table_default_grid():
@@ -95,12 +125,15 @@ def test_price_shock_table_default_grid():
 def test_stress_comparison_day_of_shock():
     # PB not repriced: 2,600 - street 9m x 0.3% x 0.2 (5,400) = -2,800
     # TRS repriced: 24,600 + 10m x 0.2% x 0.2 (4,000) - 5,400 = 23,200
-    # upgrade repriced: 4,200 + 4,000 = 8,200 (no street leg in its dealer net)
+    # upgrade (reverse repo) base: fee 6,000 - street 77,400 + reverse repo 8.82m x 4% x 0.2
+    #   (70,560) + surplus 0.18m x 4% x 0.2 (1,440) - gilt borrow 1,800 = -1,200
+    # stressed: + fee 4,000 - street 5,400 = -2,600
     df = stress_comparison(fin73(), cap(), T).set_index("route")
     assert df.loc["PB", "dealer_net_stressed"] == approx(-2_800)
     assert df.loc["PB", "dealer_net_change"] == approx(-5_400)
     assert df.loc["TRS", "dealer_net_stressed"] == approx(23_200)
-    assert df.loc["Collateral upgrade", "dealer_net_stressed"] == approx(8_200)
+    assert df.loc["Collateral upgrade", "dealer_net_base"] == approx(-1_200)
+    assert df.loc["Collateral upgrade", "dealer_net_stressed"] == approx(-2_600)
     assert df.loc["TRS", "k_stressed"] == approx(0.03)
     assert df.loc["TRS", "leverage_stressed"] == approx(df.loc["TRS", "leverage_base"])
 
@@ -177,3 +210,23 @@ def test_term_vs_rolling_by_preset():
     assert df.loc["quarter_end_squeeze", "cheaper"] == "rolling"
     for _, row in df.iterrows():
         assert (row["cheaper"] == "term") == (row["term_premium"] < row["breakeven_term_premium"])
+
+
+def test_gilt_borrow_shock():
+    # borrowed source: base 4,200 = fee 6,000 - gilt borrow 1,800
+    # shock +0.2%: gilt borrow = 9m x 0.3% x 0.2 = 5,400 -> 6,000 - 5,400 = 600
+    g = StressPreset("gilt", "Gilt borrow (hypothetical)", 0.0, 0.0, 0.0, 0.0, 0, 0.0,
+                     gilt_borrow_shock=0.002)
+    assert apply_preset(fin73(), g).gilt_borrow_fee == approx(0.003)
+    df = stress_comparison(fin73(gilt_source="borrowed"), cap(), g).set_index("route")
+    assert df.loc["Collateral upgrade", "dealer_net_base"] == approx(4_200)
+    assert df.loc["Collateral upgrade", "dealer_net_stressed"] == approx(600)
+    for p in all_presets():
+        assert p.gilt_borrow_shock > 0
+
+
+def test_repricing_gap_after_full_repricing():
+    # base gap (no shock): PB 96,000 - TRS 106,000 = -10,000
+    # full repricing: -10,000 - (N - L) x shock x tau = -10,000 - 2m x 0.2% x 0.2 = -10,800
+    df = repricing_path(fin73(), T, months=3, fraction_per_month=0.5, month_days=73)
+    assert df["cost_gap"].iloc[-1] == approx(-10_000 - (10e6 - 8e6) * 0.002 * 0.2)

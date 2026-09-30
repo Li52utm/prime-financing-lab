@@ -15,7 +15,7 @@ from dataclasses import replace
 import pytest
 
 from engine.capital import (
-    CapitalInputs, NettingSetTrade, capital_comparison, comprehensive_exposure,
+    CapitalInputs, NettingSetTrade, best_for_desk, capital_comparison, comprehensive_exposure,
     default_capital_inputs, derivative_leverage_exposure, equity_haircut_10d, k_grid, k_sensitivity,
     trs_im_spread_for_hurdle, trs_vs_im_remuneration,
     pb_capital, pb_rwa_by_margin, return_on, saccr_ead, saccr_equity_addon,
@@ -38,7 +38,7 @@ def fin(**overrides) -> FinancingInputs:
         pb_margin=0.20, trs_im=0.15, street_haircut=0.10,
         pb_spread=0.005, trs_spread=0.004, street_repo_spread=0.003,
         upgrade_haircut=0.10, upgrade_fee=0.003, aim_listed=False,
-        gilt_repo_spread=0.0, gilt_haircut=0.02, gilt_borrow_fee=0.001,
+        gilt_source="reverse_repo", gilt_repo_spread=0.0, gilt_haircut=0.02, gilt_borrow_fee=0.001,
         dividend=0.01, ex_div_day=30, trs_pass_through=0.9, manufactured_pass_through=1.0,
         wht_client=0.0, wht_dealer=0.0, include_sdrt=True, sdrt_rate=0.005,
         dealer_hedge_sdrt_rate=0.0, shadow_cost_k=0.02,
@@ -50,7 +50,7 @@ def cap(**overrides) -> CapitalInputs:
     c = CapitalInputs(
         haircut_regime="basel_3_1", haircut_class="main_index", saccr_type="single",
         lcr_level2b=True, gilt_band="1-3y", pb_liquidation_days=10, include_street_leg=True,
-        gilt_source="reverse_repo", surplus_cash_placement="central_bank",
+        surplus_cash_placement="central_bank",
         trs_margined=False, trs_mtm=0.0, trs_reset_days=None,
         rw_client=1.0, rw_street=0.4, target_rorwa=0.015,
     )
@@ -280,7 +280,7 @@ def test_upgrade_reverse_repo():
     # R = 9m x 0.98 = 8.82m; reverse repo E* = max(0, 8.82m - 9m x 0.98586) = 0
     # Leverage = 8.82m + 0 (client) + 0 (reverse repo) + 1m (street) = 9.82m; surplus 0.18m excluded
     # RWA = 541,492.78 + 0 + 965,685.42 = 1,507,178.21
-    r = upgrade_capital(fin(), cap(gilt_source="reverse_repo"))
+    r = upgrade_capital(fin(gilt_source="reverse_repo"), cap())
     assert r.ead_parts["reverse_repo"] == 0.0
     assert r.leverage_exposure == approx(9_820_000)
     assert r.rwa == approx(1_507_178.21)
@@ -291,7 +291,7 @@ def test_upgrade_reverse_repo():
 def test_upgrade_borrowed():
     # Leverage = max(0, 9m - 10m) + max(0, 10m - 9m) = 1m
     # gilt lender E* = 10m x 1.1414214 - 9m x 0.9858579 = 2,541,492.78; RWA x 0.4 = 1,016,597.11
-    r = upgrade_capital(fin(), cap(gilt_source="borrowed"))
+    r = upgrade_capital(fin(gilt_source="borrowed"), cap())
     assert r.leverage_exposure == approx(1_000_000)
     assert r.ead_parts["gilt_lender"] == approx(2_541_492.78)
     assert r.rwa == approx(541_492.78 + 1_016_597.11)
@@ -300,17 +300,17 @@ def test_upgrade_borrowed():
 
 def test_upgrade_inventory_hqla():
     # Leverage 0 incremental; HQLA = -9m + 50% x 10m = -4m (large cap Level 2B)
-    r = upgrade_capital(fin(), cap(gilt_source="inventory"))
+    r = upgrade_capital(fin(gilt_source="inventory"), cap())
     assert r.leverage_exposure == 0.0
     assert r.hqla_change == approx(-4_000_000)
     # not Level 2B eligible: -9m
-    assert upgrade_capital(fin(), cap(gilt_source="inventory", lcr_level2b=False)).hqla_change == \
+    assert upgrade_capital(fin(gilt_source="inventory"), cap(lcr_level2b=False)).hqla_change == \
         approx(-9_000_000)
 
 
 def test_upgrade_unknown_source():
     with pytest.raises(ValueError):
-        upgrade_capital(fin(), cap(gilt_source="magic"))
+        upgrade_capital(fin(gilt_source="magic"), cap())
 
 
 # --- Returns ---------------------------------------------------------------------
@@ -358,7 +358,7 @@ def test_capital_comparison_required_spread_round_trip():
 
 def test_default_capital_inputs():
     c = default_capital_inputs()
-    assert c.haircut_regime == "basel_3_1" and c.gilt_source == "reverse_repo"
+    assert c.haircut_regime == "basel_3_1"
     assert c.include_street_leg and not c.trs_margined and c.trs_mtm == 0.0
     assert default_capital_inputs("small_cap").haircut_class == "other_listed"
     assert not default_capital_inputs("convertible_style").lcr_level2b
@@ -415,3 +415,27 @@ def test_trs_im_spread_for_hurdle():
     df = capital_comparison(replace(x, im_remuneration_spread=s), cap()).set_index("route")
     assert df.loc["TRS", "role"] == approx(0.005)
     assert trs_im_spread_for_hurdle(replace(x, trs_im=0.0), cap()) is None
+
+
+# --- Hurdle clearance ---------------------------------------------------------------------
+
+def test_hurdle_clearance_and_best_for_desk():
+    """tau 0.2, reverse repo upgrade. TRS RoLE 0.945898%, LE 13,003,516.91, a = 16,600.
+    k = 2%: TRS misses; cushion = (0.40% - 1.770703%) = -137.07 bp. No route clears -> None.
+    k = 0.5%: required = (0.005 x 13,003,516.91 x 0.2 - 16,600) / 2m = -0.179824%
+      cushion = 0.40% + 0.179824% = 57.98 bp -> clears.
+      PB RoLE = 2,600 / (9m x 0.2) = 0.1444% misses; upgrade net -1,200 misses -> best = TRS.
+    """
+    df = capital_comparison(fin(tenor_days=73, holding_period_days=73), cap()).set_index("route")
+    assert not df.loc["TRS", "clears_role_hurdle"]
+    assert df.loc["TRS", "role_hurdle_cushion_bp"] == approx(-137.0703, rel=1e-5)
+    assert best_for_desk(df.reset_index()) is None
+
+    df = capital_comparison(fin(tenor_days=73, holding_period_days=73, shadow_cost_k=0.005),
+                            cap()).set_index("route")
+    assert df.loc["TRS", "clears_role_hurdle"]
+    assert df.loc["TRS", "role_hurdle_cushion_bp"] == approx(57.9824, rel=1e-5)
+    assert df.loc["PB", "role"] == approx(2_600 / (9e6 * 0.2))
+    assert not df.loc["PB", "clears_role_hurdle"]
+    assert not df.loc["Collateral upgrade", "clears_role_hurdle"]
+    assert best_for_desk(df.reset_index()) == "TRS"

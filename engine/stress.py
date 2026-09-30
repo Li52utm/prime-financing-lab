@@ -3,8 +3,9 @@
 Every preset and shock value is HYPOTHETICAL (an own assumption in assumptions.py). Capital
 figures are ILLUSTRATIVE AND SIMPLIFIED, as in engine/capital.py.
 
-1. Price shock: a stock move feeds the TRS mark-to-market V. Shows RC, multiplier, EAD, RWA
-   and leverage exposure. Only V moves; the hedge and street repo stay at the static notional.
+1. Price shock: a stock move feeds the TRS mark-to-market V and scales the hedge value, the
+   street repo collateral and the SA-CCR adjusted notional. Shows RC, multiplier, EAD, RWA
+   and leverage exposure. Street repo cash and client IM stay at their original amounts.
 2. Presets: shock the client spread, street spread, shadow cost k and street haircut.
 3. Pass-through lag: after a shock the TRS spread reprices fully at once, while the on-sheet
    PB spread reprices by a fraction per month. Street shocks hit the dealer immediately.
@@ -34,6 +35,7 @@ class StressPreset:
     street_haircut_change: float
     turn_days: int
     term_premium: float
+    gilt_borrow_shock: float = 0.0  # applies to the upgrade gilt borrow fee (all sources)
 
 
 def get_preset(name: str) -> StressPreset:
@@ -50,9 +52,12 @@ def all_presets() -> list[StressPreset]:
 
 def price_shock(x: FinancingInputs, c: CapitalInputs, price_move: float) -> dict:
     """Effect of a stock move on the TRS counterparty exposure.
-    V = -N * price_move (the dealer pays the equity return, so a fall is owed to the dealer)."""
+    V = -N * price_move (the dealer pays the equity return, so a fall is owed to the dealer).
+    The hedge value, the street repo collateral and (for a TRS on a number of shares) the
+    SA-CCR adjusted notional scale by (1 + price_move) (PRA CCR (CRR) Art 279b(1)(c)).
+    The street repo cash and the client's IM stay at their original amounts."""
     v = trs_mtm_from_price_move(x.notional, price_move)
-    cs = replace(c, trs_mtm=v)
+    cs = replace(c, trs_mtm=v, trs_price_move=price_move)
     sa = trs_saccr(x, cs)
     cap = trs_capital(x, cs)
     return {
@@ -87,6 +92,7 @@ def apply_preset(x: FinancingInputs, p: StressPreset, pb_repriced: float = 1.0,
         street_repo_spread=x.street_repo_spread + p.street_spread_shock,
         street_haircut=x.street_haircut + p.street_haircut_change,
         shadow_cost_k=x.shadow_cost_k + p.k_shock,
+        gilt_borrow_fee=x.gilt_borrow_fee + p.gilt_borrow_shock,
     )
 
 
@@ -130,6 +136,9 @@ def repricing_path(x: FinancingInputs, p: StressPreset,
     Each row is one month-long period priced at that month's spreads. Client cost is
     financing cost excluding SDRT (dividends excluded), so the gap shows repricing only.
     cost_gap = PB client cost - TRS client cost (negative = PB cheaper for the client).
+    Once PB has fully repriced the gap is NOT the pre-shock gap: PB reprices on its loan
+    L = N(1 - pb_margin) and the TRS on N, so
+      gap_full = gap_base - (N - L) * client_spread_shock * tau_month.
     dealer_pb_shortfall = PB dealer net if fully repriced - PB dealer net actually earned.
     """
     xm = replace(x, tenor_days=month_days)

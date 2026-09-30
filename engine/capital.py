@@ -19,10 +19,11 @@ import pandas as pd
 
 import assumptions as A
 from engine.financing import (
-    FinancingInputs, pb_route, required_spread, trs_route, upgrade_route, year_fraction,
+    GILT_SOURCES, FinancingInputs, pb_route, required_spread, trs_route, upgrade_route,
+    year_fraction,
 )
 
-GILT_SOURCES = ("reverse_repo", "borrowed", "inventory")
+
 
 # Shown as a banner at the top of the Capital page (step 4).
 NOT_MODELLED_BANNER = (
@@ -53,11 +54,18 @@ class CapitalInputs:
     gilt_band: str
     pb_liquidation_days: int
     include_street_leg: bool
-    gilt_source: str
     surplus_cash_placement: str  # "central_bank" or "counted"
     trs_margined: bool
     trs_mtm: float  # dealer-side V
     trs_reset_days: int | None  # None -> no interim resets, M = tenor
+    # Stock move since trade start. Scales the hedge value, the street repo collateral and
+    # (if trs_notional_in_units) the SA-CCR adjusted notional. Set together with trs_mtm;
+    # engine.stress.price_shock does both.
+    trs_price_move: float = 0.0
+    # PRA CCR (CRR) Art 279b(1)(c): equity adjusted notional = market price x number of units,
+    # unless the trade is expressed as a notional amount, in which case the notional is used.
+    # Own assumption: the TRS references a number of shares (True).
+    trs_notional_in_units: bool = A.TRS_NOTIONAL_IN_UNITS
     netting_set: tuple[NettingSetTrade, ...] = field(default_factory=tuple)
     rw_client: float = A.RW_CLIENT
     rw_street: float = A.RW_STREET
@@ -74,7 +82,6 @@ def default_capital_inputs(asset_class: str = A.DEFAULT_ASSET_CLASS, **overrides
         gilt_band=A.DEFAULT_GILT_BAND,
         pb_liquidation_days=A.PB_LIQUIDATION_DAYS,
         include_street_leg=A.INCLUDE_STREET_LEG,
-        gilt_source=A.DEFAULT_GILT_SOURCE,
         surplus_cash_placement=A.DEFAULT_SURPLUS_CASH_PLACEMENT,
         trs_margined=A.TRS_MARGINED,
         trs_mtm=A.TRS_MTM,
@@ -201,14 +208,18 @@ def _surplus_leverage(surplus: float, c: CapitalInputs) -> float:
     return surplus if c.surplus_cash_placement == "counted" else 0.0
 
 
-def _street_repo(x: FinancingInputs, c: CapitalInputs) -> tuple[float, float, float]:
+def _street_repo(x: FinancingInputs, c: CapitalInputs,
+                 stock_value: float | None = None) -> tuple[float, float, float]:
     """Dealer repos the equity (notional N) to a street bank for cash N(1 - street_haircut).
-    Returns (cash raised, CCR exposure E*, leverage add-on)."""
+    Returns (cash raised, CCR exposure E*, leverage add-on).
+    stock_value: current value of the equity lent (default N). The cash raised stays at the
+    original N(1 - h_st); remargining the street repo is not modelled."""
     h_eq5 = scaled_haircut(equity_haircut_10d(c.haircut_regime, c.haircut_class),
                            A.REPO_LIQUIDATION_DAYS)
+    value = x.notional if stock_value is None else stock_value
     raised = x.notional * (1 - x.street_haircut)
-    ead = comprehensive_exposure(x.notional, h_eq5, raised, 0.0)
-    return raised, ead, sft_leverage_addon(x.notional, raised)
+    ead = comprehensive_exposure(value, h_eq5, raised, 0.0)
+    return raised, ead, sft_leverage_addon(value, raised)
 
 
 def pb_capital(x: FinancingInputs, c: CapitalInputs) -> CapitalResult:
@@ -266,10 +277,13 @@ def pb_capital(x: FinancingInputs, c: CapitalInputs) -> CapitalResult:
 
 
 def trs_saccr(x: FinancingInputs, c: CapitalInputs) -> dict:
-    """SA-CCR exposure of the TRS netting set with the client."""
+    """SA-CCR exposure of the TRS netting set with the client.
+    Adjusted notional = N(1 + price move) for a TRS on a number of shares, else N
+    (Art 279b(1)(c)). NICA stays at the cash IM posted, N * trs_im."""
     maturity_days = c.trs_reset_days if c.trs_reset_days else x.tenor_days
     mf = saccr_mf_margined() if c.trs_margined else saccr_mf_unmargined(maturity_days)
-    trades = [NettingSetTrade("subject", -x.notional, c.saccr_type), *c.netting_set]
+    adj_notional = x.notional * (1 + c.trs_price_move) if c.trs_notional_in_units else x.notional
+    trades = [NettingSetTrade("subject", -adj_notional, c.saccr_type), *c.netting_set]
     addon = saccr_equity_addon(trades, mf)
     nica = x.notional * x.trs_im
     vm = c.trs_mtm if c.trs_margined else 0.0  # margined: full daily cash VM assumed
@@ -290,24 +304,29 @@ def trs_capital(x: FinancingInputs, c: CapitalInputs) -> CapitalResult:
 
     If h_st > im, the gap N(h_st - im) is funded unsecured instead of leaving a surplus.
 
-    Leverage exposure = hedge stock N (Art 429b; repo does not derecognise it)
+    After a stock move m (trs_price_move) with V = -N*m: the hedge is worth N(1+m) and the
+    TRS asset V offsets it, so assets still total the original cash. The street repo
+    stays at the original cash borrowed. If margined, cash VM received (V) adds to cash.
+
+    Leverage exposure = hedge stock N(1+m) (Art 429b; repo does not derecognise it)
                       + 1.4 * (max{V - cash VM, 0} + AddOn)  derivative, multiplier 1 (Art 429c)
-                      + N*h_st  street SFT add-on (if street leg on)
+                      + max{0, N(1+m) - N(1-h_st)}  street SFT add-on (if street leg on)
                       + surplus cash (only if "counted")
     RWA = SA-CCR EAD * RW_client + E*_street * RW_street.
     Market risk on the delta-hedged stock is NOT MODELLED.
     """
     sa = trs_saccr(x, c)
-    raised, ead_street, street_addon = _street_repo(x, c)
+    hedge = x.notional * (1 + c.trs_price_move)
+    raised, ead_street, street_addon = _street_repo(x, c, stock_value=hedge)
     im_cash = x.notional * x.trs_im
-    cash_in = raised + im_cash
+    cash_in = raised + im_cash + sa["vm"]
     surplus = max(0.0, cash_in - x.notional)
     unsecured = max(0.0, x.notional - cash_in)
 
     ead_parts = {"client_saccr": sa["ead"]}
     rwa_parts = {"client_saccr": sa["ead"] * c.rw_client}
     lev_parts = {
-        "hedge_stock": x.notional,
+        "hedge_stock": hedge,
         "derivative": derivative_leverage_exposure(c.trs_mtm, sa["vm"], sa["addon"]),
         "surplus_cash": _surplus_leverage(surplus, c),
     }
@@ -325,11 +344,13 @@ def trs_capital(x: FinancingInputs, c: CapitalInputs) -> CapitalResult:
         leverage_parts=lev_parts,
         hqla_change=0.0,
         t_account={
-            "assets": {"Hedge stock": x.notional, "Surplus cash": surplus,
-                       "TRS fair value": max(c.trs_mtm, 0.0)},
+            "assets": {"Hedge stock": hedge, "Surplus cash": surplus,
+                       "TRS fair value": max(c.trs_mtm, 0.0),
+                       "Cash VM posted": max(-sa["vm"], 0.0)},
             "liabilities": {"Repo from street": raised, "Client cash IM": im_cash,
                             "Unsecured funding": unsecured,
-                            "TRS fair value (liability)": max(-c.trs_mtm, 0.0)},
+                            "TRS fair value (liability)": max(-c.trs_mtm, 0.0),
+                            "Cash VM received": max(sa["vm"], 0.0)},
         },
     )
 
@@ -371,7 +392,7 @@ def upgrade_capital(x: FinancingInputs, c: CapitalInputs) -> CapitalResult:
     liabilities: dict = {}
     hqla = 0.0
 
-    if c.gilt_source == "reverse_repo":
+    if x.gilt_source == "reverse_repo":
         cash_lent = gilts * (1 - x.gilt_haircut)
         raised, ead_street, street_addon = _street_repo(x, c)
         surplus = max(0.0, raised - cash_lent)
@@ -388,17 +409,17 @@ def upgrade_capital(x: FinancingInputs, c: CapitalInputs) -> CapitalResult:
             lev_parts["street_sft_addon"] = street_addon
         assets = {"Reverse repo receivable": cash_lent, "Surplus cash": surplus}
         liabilities = {"Repo from street": raised, "Unsecured funding": unsecured}
-    elif c.gilt_source == "borrowed":
+    elif x.gilt_source == "borrowed":
         if c.include_street_leg:
             ead_gl = comprehensive_exposure(x.notional, h_eq5, gilts, h_g5)
             ead_parts["gilt_lender"] = ead_gl
             rwa_parts["gilt_lender"] = ead_gl * c.rw_street
             lev_parts["gilt_lender_sft_addon"] = sft_leverage_addon(x.notional, gilts)
-    elif c.gilt_source == "inventory":
+    elif x.gilt_source == "inventory":
         eligible = x.notional * (1 - A.LCR_LEVEL2B_EQUITY_HAIRCUT) if c.lcr_level2b else 0.0
         hqla = -gilts + eligible
     else:
-        raise ValueError(f"Unknown gilt_source {c.gilt_source!r}; expected one of {GILT_SOURCES}")
+        raise ValueError(f"Unknown gilt_source {x.gilt_source!r}; expected one of {GILT_SOURCES}")
 
     return CapitalResult(
         route="Collateral upgrade",
@@ -506,6 +527,7 @@ def capital_comparison(x: FinancingInputs, c: CapitalInputs) -> pd.DataFrame:
                                x.shadow_cost_k, tau)
         candidates = {k: v for k, v in (("RWA", s_rwa), ("leverage", s_le)) if v is not None}
         binding = max(candidates, key=candidates.get) if candidates else None
+        role = return_on(fin.dealer_net, cap.leverage_exposure, tau)
         rows.append({
             "route": fin.route,
             "dealer_net_gbp": fin.dealer_net,
@@ -520,5 +542,18 @@ def capital_comparison(x: FinancingInputs, c: CapitalInputs) -> pd.DataFrame:
             "required_spread_rorwa": s_rwa,
             "required_spread_role": s_le,
             "binding": binding,
+            # Hurdle clearance: clears if gross RoLE >= k. Cushion in bp of spread is
+            # current minus required (negative = spread shortfall to reach the hurdle).
+            "clears_role_hurdle": None if role is None else bool(role >= x.shadow_cost_k),
+            "role_hurdle_cushion_bp": None if s_le is None else (spread - s_le) * 1e4,
         })
     return pd.DataFrame(rows)
+
+
+def best_for_desk(df: pd.DataFrame) -> str | None:
+    """Route with the highest RoLE among those that clear the RoLE hurdle k.
+    None if no route clears; the app must then say so rather than name a winner."""
+    clearing = df[df["clears_role_hurdle"] == True]  # noqa: E712 (column may hold None)
+    if clearing.empty:
+        return None
+    return clearing.loc[clearing["role"].idxmax(), "route"]
