@@ -2,7 +2,7 @@
 
 A Streamlit dashboard comparing three ways to finance a long equity position: on-sheet prime brokerage, total return swap (TRS) and collateral upgrade. For each route it shows the client's all-in cost and the dealer's return on balance sheet.
 
-> **Status: step 2 of 5.** The financing engine (`engine/financing.py`) and the capital engine (`engine/capital.py`) are built. This README gets its full version in step 5.
+> **Status: step 4 of 5.** The engines (`engine/financing.py`, `engine/capital.py`, `engine/stress.py`) and the Streamlit app are built. This README gets its full version in step 5.
 
 All numbers are illustrative. They use public data and the author's own assumptions. All regulatory treatment is **illustrative and simplified** and is not a regulatory calculation.
 
@@ -80,8 +80,29 @@ The upgrade's dealer P&L matches the capital model's gilt source.
 - SFT minimum haircut floors
 - LCR beyond one illustrative HQLA line (Level 2B at a 50% haircut, **UNVERIFIED**)
 
+## The app: Prime Financing Lab
+
+```
+.venv\Scripts\python -m streamlit run app.py
+```
+
+It opens at http://localhost:8501. The sidebar holds the trade ticket, with an Advanced expander for the haircut regime, street leg, surplus cash placement, PB holding period, risk weights, TRS unit notional and resets.
+
+| Page | What it shows |
+|---|---|
+| Summary | Break-even k and required vs quoted spread per route, hurdle clearance (no winner is named if none clears), one table of all three routes, and the k sensitivity |
+| Client view | Financing and net cost in bp over SONIA, with and without SDRT; a cost waterfall; the breakeven TRS spread |
+| Desk view | Dealer P&L by component, RoLE and RoRWA against hurdles, quoted vs required spread, TRS return vs IM remuneration, and three netting cases |
+| Capital | NOT MODELLED banner, RWA and leverage by component, T-accounts, gilt source comparison, PB RWA vs margin, SA-CCR detail |
+| Stress lab | Hypothetical presets under three horizon views, the price shock, the repricing lag, term vs rolling |
+| Assumptions | Every value in `assumptions.py`, read live, with its source and a VERIFIED / UNVERIFIED tag (n/a for own assumptions and hypothetical values) |
+
+Every page carries a banner saying the default spreads and k are placeholder assumptions, not market levels. Every chart carries the subtitle "Illustrative, not a regulatory calculation". Every headline number has a "How is this calculated" expander.
+
 ## Running the tests
 
 ```
 .venv\Scripts\python -m pytest
 ```
+
+`tests/test_app.py` smoke-tests every page with Streamlit's AppTest.

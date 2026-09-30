@@ -98,6 +98,7 @@ class RouteResult:
     sdrt_one_off: float  # full SDRT paid on purchase (0 if off, AIM, or TRS)
     sdrt: float  # amortised SDRT charged to this tenor, included in financing_cost
     financing_cost_ex_sdrt: float
+    client_parts: dict  # CLIENT_PART_NAMES -> GBP; sum = net_cost, sum ex dividend = financing
     dealer_net: float  # sum of dealer_parts
     dealer_parts: dict  # DEALER_PART_NAMES -> GBP over the tenor
     balance_sheet: float
@@ -106,6 +107,21 @@ class RouteResult:
     robs: float | None  # gross annualised return on balance sheet
     spread_name: str  # the dealer pricing lever for this route
     required_spread: float | None  # spread at which gross ROBS == shadow_cost_k
+
+
+CLIENT_PART_NAMES = (
+    "sonia",  # SONIA on the amount the client borrows (loan, TRS notional, gilt repo cash)
+    "spread",  # spread over SONIA on that amount
+    "fee",  # upgrade fee
+    "margin_funding",  # client funding rate on its own margin / IM / shortfall
+    "im_remuneration",  # interest received on TRS cash IM (negative)
+    "sdrt",  # amortised SDRT
+    "dividend_credit",  # dividend or manufactured dividend received (negative)
+)
+
+
+def _client_parts(**parts: float) -> dict:
+    return {name: parts.get(name, 0.0) for name in CLIENT_PART_NAMES}
 
 
 GILT_SOURCES = ("reverse_repo", "borrowed", "inventory")
@@ -251,6 +267,9 @@ def pb_route(x: FinancingInputs) -> RouteResult:
         sdrt_one_off=client_sdrt(x),
         sdrt=sdrt,
         financing_cost_ex_sdrt=financing_cost - sdrt,
+        client_parts=_client_parts(
+            sonia=loan * x.sonia * tau, spread=loan * x.pb_spread * tau,
+            margin_funding=margin_cost, sdrt=sdrt, dividend_credit=-client_div),
         dealer_net=dealer_net,
         dealer_parts=parts,
         balance_sheet=loan,
@@ -296,6 +315,10 @@ def trs_route(x: FinancingInputs) -> RouteResult:
         sdrt_one_off=0.0,
         sdrt=0.0,
         financing_cost_ex_sdrt=financing_cost,
+        client_parts=_client_parts(
+            sonia=x.notional * x.sonia * tau, spread=x.notional * x.trs_spread * tau,
+            margin_funding=im_cost, im_remuneration=-im_interest if im_interest else 0.0,
+            dividend_credit=-passed_div),
         dealer_net=dealer_net,
         dealer_parts=parts,
         balance_sheet=x.notional,
@@ -372,6 +395,9 @@ def upgrade_route(x: FinancingInputs) -> RouteResult:
         sdrt_one_off=client_sdrt(x),
         sdrt=sdrt,
         financing_cost_ex_sdrt=financing_cost - sdrt,
+        client_parts=_client_parts(
+            sonia=cash * x.sonia * tau, spread=cash * x.gilt_repo_spread * tau, fee=fee,
+            margin_funding=shortfall_cost, sdrt=sdrt, dividend_credit=-manufactured),
         dealer_net=dealer_net,
         dealer_parts=parts,
         balance_sheet=balance_sheet,

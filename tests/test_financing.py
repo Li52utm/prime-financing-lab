@@ -395,3 +395,27 @@ def test_upgrade_gilt_borrow_fee_by_source():
     r = upgrade_route(base(gilt_source="reverse_repo", gilt_borrow_fee_reverse_repo=0.0005))
     assert r.dealer_parts["gilt_borrow"] == approx(-900)
     assert r.dealer_net == approx(-300)
+
+
+# --- Client cost decomposition -------------------------------------------------------------
+
+def test_client_parts_sum_to_financing_and_net():
+    # PB: SONIA 8m x 4% x 0.2 = 64,000; spread 8m x 0.5% x 0.2 = 8,000; margin 24,000;
+    # SDRT 50,000; dividend -100,000 -> financing 146,000, net 46,000
+    p = pb_route(base()).client_parts
+    assert p["sonia"] == approx(64_000) and p["spread"] == approx(8_000)
+    assert p["margin_funding"] == approx(24_000) and p["sdrt"] == approx(50_000)
+    assert p["dividend_credit"] == approx(-100_000)
+    for route in (pb_route, trs_route, upgrade_route):
+        for x in (base(), base(im_remuneration_spread=0.0), base(holding_period_days=365)):
+            r = route(x)
+            ex_div = sum(v for k, v in r.client_parts.items() if k != "dividend_credit")
+            assert ex_div == approx(r.financing_cost)
+            assert sum(r.client_parts.values()) == approx(r.net_cost)
+
+
+def test_client_parts_trs_im_remuneration():
+    # IM 1.5m at SONIA flat: -1.5m x 4% x 0.2 = -12,000 (mirrors the dealer part)
+    r = trs_route(base(im_remuneration_spread=0.0))
+    assert r.client_parts["im_remuneration"] == approx(-12_000)
+    assert r.client_parts["im_remuneration"] == approx(r.dealer_parts["im_remuneration"])

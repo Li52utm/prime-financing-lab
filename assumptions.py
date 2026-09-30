@@ -42,8 +42,8 @@ DEALER_UNSECURED_SPREAD = 0.0080
 # TRS IM is the only cash margin in the model: PB margin is the client's own equity in the
 # stock, and every other haircut or over-collateralisation is posted in securities.
 IM_REMUNERATION_SPREAD = 0.0
-IM_REMUNERATION_SPREAD_MIN = 0.0
-IM_REMUNERATION_SPREAD_MAX = SONIA
+IM_REMUNERATION_SPREAD_MIN = 0.0  # own assumption: slider lower bound (SONIA flat)
+IM_REMUNERATION_SPREAD_MAX = SONIA  # own assumption: slider upper bound (IM earns nothing)
 
 # --- Asset-class presets (all own assumptions, illustrative) --------------
 # pb_margin          client margin on the PB loan (fraction of notional)
@@ -92,7 +92,7 @@ ASSET_CLASSES = {
         "aim_listed": False,
     },
 }
-DEFAULT_ASSET_CLASS = "large_cap"
+DEFAULT_ASSET_CLASS = "large_cap"  # own assumption: the UK large-cap example
 
 # --- Collateral upgrade: gilt leg -----------------------------------------
 
@@ -133,7 +133,7 @@ DEALER_HEDGE_SDRT_RATE = 0.0
 # 0.5% (was 2% on accounting balance sheet in step 1).
 SHADOW_COST_K = 0.005
 SHADOW_COST_K_MIN = 0.0  # slider bounds (own assumption)
-SHADOW_COST_K_MAX = 0.030
+SHADOW_COST_K_MAX = 0.030  # own assumption: slider upper bound
 SHADOW_COST_K_STEP = 0.0025  # own assumption: slider step and sensitivity grid spacing
 
 
@@ -161,7 +161,7 @@ HAIRCUT_REGIMES = {
         "other_listed": 0.25,
     },
 }
-DEFAULT_HAIRCUT_REGIME = "basel_3_1"
+DEFAULT_HAIRCUT_REGIME = "basel_3_1"  # own assumption: the regime in force from 1 Jan 2027
 
 # Credit quality step 1 (AA- or better) central government debt, 10-day haircuts.
 # Verified: PRA CRM (CRR) Art 224(1) Table 1 (01/01/2027): <=1y 0.5, >1<=3y 2, >3<=5y 2,
@@ -193,7 +193,7 @@ SACCR_MULTIPLIER_FLOOR = 0.05
 # Verified: PRA CCR (CRR) Art 280d(3)-(4): single-name SF 32%, rho 50%; multi-name SF 20%,
 #   rho 80%. (The plan cited 280c; the equity add-on is Art 280d in the PRA text.)
 SACCR_EQUITY_SF = {"single": 0.32, "index": 0.20}
-SACCR_EQUITY_RHO = {"single": 0.50, "index": 0.80}
+SACCR_EQUITY_RHO = {"single": 0.50, "index": 0.80}  # Verified: PRA CCR (CRR) Art 280d(3)
 # Verified: PRA CCR (CRR) Art 279c(1): unmargined MF = sqrt(min{max{M, 10/OneBusinessYear}, 1});
 #   margined MF = 1.5 * sqrt(MPOR / OneBusinessYear). M is in business-day years.
 SACCR_MIN_MATURITY_BD = 10
@@ -226,7 +226,7 @@ CAPITAL_ASSET_CLASSES = {
 LCR_LEVEL2B_EQUITY_HAIRCUT = 0.50
 
 # --- Trade structure defaults (own assumptions) -----------------------------------------
-INCLUDE_STREET_LEG = True
+INCLUDE_STREET_LEG = True  # own assumption: include the street counterparty leg
 DEFAULT_GILT_SOURCE = "reverse_repo"  # one of reverse_repo, borrowed, inventory
 # Where surplus cash from the street repo sits. "central_bank": BoE reserves, netted
 #   against a same-currency liability under PRA Leverage Ratio (CRR) Art 429a
@@ -304,3 +304,17 @@ REPRICING_HORIZON_MONTHS = 6  # own assumption: months shown on the repricing ch
 
 # Term vs rolling (own assumption): horizon over which a term spread is locked.
 TERM_HORIZON_DAYS = 91
+
+
+# =============================================================================
+# App (Prime Financing Lab)
+# =============================================================================
+
+# HYPOTHETICAL own assumption: the client's other trade used to illustrate SA-CCR netting.
+# The client is short a TRS (the dealer receives the equity return, so the dealer's signed
+# notional is positive). Recognising it requires a legally enforceable netting agreement.
+NETTING_OTHER_NOTIONAL = 5_000_000.0
+NETTING_DEFAULT_CASE = "different_name"  # "different_name" or "same_name"
+
+# Own assumption: upper end of the TRS spread axis on the client breakeven chart (decimal).
+BREAKEVEN_CHART_MAX_SPREAD = 0.03
