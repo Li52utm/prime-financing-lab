@@ -44,9 +44,12 @@ All presets and shocks are **hypothetical own assumptions** in `assumptions.py`.
   - the SA-CCR adjusted notional. Under PRA CCR (CRR) Art 279b(1)(c), an equity adjusted notional is market price × number of units. A TRS expressed as a fixed GBP notional keeps its notional; this is a toggle, and the default is a TRS on a number of shares.
 
   The street repo cash and the client's IM stay at their original amounts. The page shows RC, multiplier, EAD, RWA and leverage exposure.
-- **Presets:** `quarter_end_squeeze`, `year_end_turn` and `collateral_shortage`. There are two views:
-  - **full tenor**, labelled "If the shock persisted for the whole tenor": every shock applies for the whole tenor.
-  - **turn only**: the street spread shock is paid only for the preset's turn days, costed with the term-vs-rolling formula. The other shocks still apply for the tenor.
+- **Presets:** `quarter_end_squeeze`, `year_end_turn` and `collateral_shortage`. There are three views. The k, street haircut and gilt borrow shocks always apply for the whole tenor. The street spread shock and the client repricing apply for the horizon set by the view, and both are costed with the term-vs-rolling formula:
+  - **"If the shock persisted for the whole tenor"**: street shock and client repricing both apply for the tenor.
+  - **"Shock for the turn days only (street and client)"**: both apply only for the preset's turn days, so both sides of the dealer's P&L use the same horizon.
+  - **"Client reprices and stays repriced"**: the street shock applies for the turn days and the client repricing for the whole tenor.
+
+  In every view, the required spread is the flat spread over the tenor, excluding client-repricing income, so it's comparable across the three.
 
   Each preset shocks:
   - the client spread

@@ -7,8 +7,9 @@ figures are ILLUSTRATIVE AND SIMPLIFIED, as in engine/capital.py.
    street repo collateral and the SA-CCR adjusted notional. Shows RC, multiplier, EAD, RWA
    and leverage exposure. Street repo cash and client IM stay at their original amounts.
 2. Presets: shock the client spread, street spread, shadow cost k, street haircut and gilt
-   borrow fee. Two views: "full_tenor" (IF THE SHOCK PERSISTED FOR THE WHOLE TENOR) and
-   "turn_only" (street shock paid only for the preset's turn days).
+   borrow fee. Three views: "full_tenor" (IF THE SHOCK PERSISTED FOR THE WHOLE TENOR),
+   "turn_only" (street and client shocks for the turn days only) and
+   "client_stays_repriced" (street shock for the turn, client repricing for the tenor).
 3. Pass-through lag: after a shock the TRS spread reprices fully at once, while the on-sheet
    PB spread reprices by a fraction per month. Street shocks hit the dealer immediately.
 4. Term vs rolling: the cost of locking a term spread across a turn versus rolling short
@@ -103,7 +104,14 @@ def apply_preset(x: FinancingInputs, p: StressPreset, pb_repriced: float = 1.0,
 
 VIEW_LABELS = {
     "full_tenor": "If the shock persisted for the whole tenor",
-    "turn_only": "Street shock for the turn days only",
+    "turn_only": "Shock for the turn days only (street and client)",
+    "client_stays_repriced": "Client reprices and stays repriced",
+}
+# (street shock horizon, client repricing horizon) per view: "tenor" or "turn".
+_VIEW_HORIZONS = {
+    "full_tenor": ("tenor", "tenor"),
+    "turn_only": ("turn", "turn"),
+    "client_stays_repriced": ("turn", "tenor"),
 }
 
 
@@ -115,54 +123,73 @@ def street_funding_amount(x: FinancingInputs, route: str) -> float:
     return x.notional * (1 - x.street_haircut)
 
 
+def _spread_base(x: FinancingInputs, route: str) -> float:
+    """Amount the client spread (or upgrade fee) is charged on."""
+    return x.notional * (1 - x.pb_margin) if route == "PB" else x.notional
+
+
 def stress_comparison(x: FinancingInputs, c: CapitalInputs, p: StressPreset,
                       pb_repriced: float = 0.0, view: str = "full_tenor") -> pd.DataFrame:
     """Base vs stressed, per route: dealer net, leverage exposure, RoLE, RoLE hurdle (k) and
     the spread needed for RoLE = k. Default: the TRS and upgrade have repriced and PB has not
     (the day the shock hits).
 
-    view "full_tenor": every shock applies for the whole tenor, i.e. the result is what
-      happens IF THE SHOCK PERSISTED FOR THE WHOLE TENOR.
-    view "turn_only": the client spread, k, haircut and gilt borrow shocks still apply for
-      the tenor, but the street spread shock is paid only for min(turn_days, tenor) days,
-      costed with term_vs_rolling (rolling cost of the shock alone).
+    k, street haircut and gilt borrow shocks always apply for the whole tenor. The street
+    spread shock and the client spread repricing apply for a horizon set by the view, and
+    are costed with term_vs_rolling (rolling cost of the shock alone over those days):
+      full_tenor             street: tenor  client: tenor  -> IF THE SHOCK PERSISTED FOR
+                                                              THE WHOLE TENOR
+      turn_only              street: turn   client: turn   -> both sides use the same horizon
+      client_stays_repriced  street: turn   client: tenor  -> client reprices and stays repriced
+    turn = min(turn_days, tenor).
+
+    required_spread_role_stressed is the flat spread over the tenor needed for RoLE = stressed
+    k, excluding any client-repricing income, so it is comparable across views.
     """
     if view not in VIEW_LABELS:
         raise ValueError(f"Unknown view {view!r}; expected one of {list(VIEW_LABELS)}")
     tau = year_fraction(x.tenor_days)
     base = capital_comparison(x, c).set_index("route")
     xs = apply_preset(x, p, pb_repriced=pb_repriced)
-    # Everything except the street spread shock, which is added back below for the chosen days.
-    xs_ex_street = apply_preset(x, replace(p, street_spread_shock=0.0), pb_repriced=pb_repriced)
-    stressed = capital_comparison(xs_ex_street, c).set_index("route")
-    shock_days = x.tenor_days if view == "full_tenor" else min(p.turn_days, x.tenor_days)
+    # k, haircut and gilt borrow shocks only; street and client shocks are added per horizon.
+    x_core = apply_preset(x, replace(p, street_spread_shock=0.0, client_spread_shock=0.0))
+    core = capital_comparison(x_core, c).set_index("route")
+    turn = min(p.turn_days, x.tenor_days)
+    street_days, client_days = (x.tenor_days if h == "tenor" else turn
+                                for h in _VIEW_HORIZONS[view])
+    repriced = {"PB": pb_repriced, "TRS": 1.0, "Collateral upgrade": A.UPGRADE_REPRICING_FRACTION}
 
     rows = {}
-    for route in stressed.index:
-        street_shock_cost = term_vs_rolling(
-            street_funding_amount(xs, route), 0.0, x.tenor_days, shock_days,
-            p.street_spread_shock, 0.0)["rolling_cost"]
-        net = stressed.loc[route, "dealer_net_gbp"] - street_shock_cost
-        le = stressed.loc[route, "leverage_exposure_gbp"]
-        spread = stressed.loc[route, "current_spread"]
-        spread_base = (x.notional * (1 - x.pb_margin)) if route == "PB" else x.notional
+    for route in core.index:
+        street_cost = term_vs_rolling(street_funding_amount(xs, route), 0.0, x.tenor_days,
+                                      street_days, p.street_spread_shock, 0.0)["rolling_cost"]
+        client_income = term_vs_rolling(_spread_base(x, route), 0.0, x.tenor_days, client_days,
+                                        p.client_spread_shock * repriced[route],
+                                        0.0)["rolling_cost"]
+        net_ex_client = core.loc[route, "dealer_net_gbp"] - street_cost
+        net = net_ex_client + client_income
+        le = core.loc[route, "leverage_exposure_gbp"]
         rows[route] = {
             "dealer_net_stressed": net,
-            "street_shock_cost": street_shock_cost,
+            "street_shock_cost": street_cost,
+            "client_repricing_income": client_income,
             "role_stressed": return_on(net, le, tau),
-            "required_spread_role_stressed": required_spread(net, spread, spread_base, le,
-                                                             xs.shadow_cost_k, tau),
+            "required_spread_role_stressed": required_spread(
+                net_ex_client, core.loc[route, "current_spread"], _spread_base(x, route), le,
+                xs.shadow_cost_k, tau),
         }
     s = pd.DataFrame.from_dict(rows, orient="index")
     out = pd.DataFrame({
         "view": view,
         "view_label": VIEW_LABELS[view],
-        "street_shock_days": shock_days,
+        "street_shock_days": street_days,
+        "client_repricing_days": client_days,
         "dealer_net_base": base["dealer_net_gbp"],
         "dealer_net_stressed": s["dealer_net_stressed"],
         "street_shock_cost": s["street_shock_cost"],
+        "client_repricing_income": s["client_repricing_income"],
         "leverage_base": base["leverage_exposure_gbp"],
-        "leverage_stressed": stressed["leverage_exposure_gbp"],
+        "leverage_stressed": core["leverage_exposure_gbp"],
         "role_base": base["role"],
         "role_stressed": s["role_stressed"],
         "k_base": x.shadow_cost_k,

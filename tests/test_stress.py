@@ -243,19 +243,39 @@ def test_full_tenor_view_is_labelled_and_costs_street_shock_for_tenor():
 
 
 def test_turn_only_view():
-    """Turn 10 days: street shock cost = 9m x 0.3% x 10 / 365 = 739.73 (term_vs_rolling
-    rolling cost of the shock alone). Other shocks (client spread, k) still apply.
-    PB  (not repriced): 2,600 - 739.73 = 1,860.27
-    TRS (repriced):     24,600 + 4,000 - 739.73 = 27,860.27
-    upgrade (reverse repo, repriced): 600 + 4,000 - 739.73 = 3,860.27
-    TRS RoLE = 27,860.27 / (13,003,516.91 x 0.2) = 1.0712592%
-    TRS required at k 3%: a = 27,860.27 - 10m x 0.6% x 0.2 = 15,860.27
+    """Turn 10 days, both sides on the same horizon (costed with term_vs_rolling):
+    street shock cost  = 9m x 0.3% x 10 / 365 = 739.73
+    client repricing   = 10m x 0.2% x 10 / 365 = 547.95 (TRS, upgrade); PB not repriced -> 0
+    PB      = 2,600 - 739.73 = 1,860.27
+    TRS     = 24,600 + 547.95 - 739.73 = 24,408.22
+    upgrade = 600 + 547.95 - 739.73 = 408.22
+    TRS RoLE = 24,408.22 / (13,003,516.91 x 0.2) = 0.9385238%
+    TRS required (excludes client repricing income) at k 3%:
+      a = 24,408.22 - 547.95 - 10m x 0.4% x 0.2 = 15,860.27
       (0.03 x 13,003,516.91 x 0.2 - 15,860.27) / 2m = 3.1080414%
     """
     df = stress_comparison(fin73(), cap(), T, view="turn_only").set_index("route")
-    assert (df["view_label"] == "Street shock for the turn days only").all()
-    assert (df["street_shock_days"] == 10).all()
+    assert (df["view_label"] == "Shock for the turn days only (street and client)").all()
+    assert (df["street_shock_days"] == 10).all() and (df["client_repricing_days"] == 10).all()
     assert df.loc["PB", "street_shock_cost"] == approx(739.726027)
+    assert df.loc["TRS", "client_repricing_income"] == approx(547.945205)
+    assert df.loc["PB", "client_repricing_income"] == 0.0
+    assert df.loc["PB", "dealer_net_stressed"] == approx(1_860.273973)
+    assert df.loc["TRS", "dealer_net_stressed"] == approx(24_408.219178)
+    assert df.loc["Collateral upgrade", "dealer_net_stressed"] == approx(408.219178)
+    assert df.loc["TRS", "role_stressed"] == approx(0.009385238)
+    assert df.loc["TRS", "required_spread_role_stressed"] == approx(0.031080414)
+
+
+def test_client_stays_repriced_view():
+    """Street shock for 10 turn days, client repricing for the full 73-day tenor:
+    client repricing = 10m x 0.2% x 0.2 = 4,000
+    PB 1,860.27; TRS 24,600 + 4,000 - 739.73 = 27,860.27; upgrade 600 + 4,000 - 739.73 = 3,860.27
+    TRS RoLE = 27,860.27 / (13,003,516.91 x 0.2) = 1.0712592%; required unchanged 3.1080414%
+    """
+    df = stress_comparison(fin73(), cap(), T, view="client_stays_repriced").set_index("route")
+    assert (df["view_label"] == "Client reprices and stays repriced").all()
+    assert (df["street_shock_days"] == 10).all() and (df["client_repricing_days"] == 73).all()
     assert df.loc["PB", "dealer_net_stressed"] == approx(1_860.273973)
     assert df.loc["TRS", "dealer_net_stressed"] == approx(27_860.273973)
     assert df.loc["Collateral upgrade", "dealer_net_stressed"] == approx(3_860.273973)
@@ -263,13 +283,23 @@ def test_turn_only_view():
     assert df.loc["TRS", "required_spread_role_stressed"] == approx(0.031080414)
 
 
+def test_required_spread_same_across_views():
+    views = ["full_tenor", "turn_only", "client_stays_repriced"]
+    frames = [stress_comparison(fin73(), cap(), replace(T, street_spread_shock=0.0), view=v)
+              .set_index("route") for v in views]
+    for f in frames[1:]:
+        assert list(f["required_spread_role_stressed"]) == approx(
+            list(frames[0]["required_spread_role_stressed"]))
+
+
 def test_turn_longer_than_tenor_equals_full_view():
     long_turn = replace(T, turn_days=200)
     full = stress_comparison(fin73(), cap(), long_turn).set_index("route")
-    turn = stress_comparison(fin73(), cap(), long_turn, view="turn_only").set_index("route")
-    assert list(turn["dealer_net_stressed"]) == approx(list(full["dealer_net_stressed"]))
-    assert list(turn["required_spread_role_stressed"]) == approx(
-        list(full["required_spread_role_stressed"]))
+    for view in ("turn_only", "client_stays_repriced"):
+        turn = stress_comparison(fin73(), cap(), long_turn, view=view).set_index("route")
+        assert list(turn["dealer_net_stressed"]) == approx(list(full["dealer_net_stressed"]))
+        assert list(turn["required_spread_role_stressed"]) == approx(
+            list(full["required_spread_role_stressed"]))
 
 
 def test_turn_view_borrowed_upgrade_has_no_street_cost():
