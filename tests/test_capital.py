@@ -16,7 +16,8 @@ import pytest
 
 from engine.capital import (
     CapitalInputs, NettingSetTrade, capital_comparison, comprehensive_exposure,
-    default_capital_inputs, derivative_leverage_exposure, equity_haircut_10d,
+    default_capital_inputs, derivative_leverage_exposure, equity_haircut_10d, k_grid, k_sensitivity,
+    trs_im_spread_for_hurdle, trs_vs_im_remuneration,
     pb_capital, pb_rwa_by_margin, return_on, saccr_ead, saccr_equity_addon,
     saccr_mf_margined, saccr_mf_unmargined, saccr_multiplier, saccr_replacement_cost,
     scaled_haircut, sft_leverage_addon, trs_capital, trs_mtm_from_price_move, trs_saccr,
@@ -33,6 +34,7 @@ def fin(**overrides) -> FinancingInputs:
     x = FinancingInputs(
         notional=10_000_000, tenor_days=91, holding_period_days=91, sonia=0.04,
         client_funding_rate=0.06, unsecured_spread=0.01,
+        im_remuneration_spread=0.04,  # = SONIA: IM unremunerated (keeps step 1 numbers)
         pb_margin=0.20, trs_im=0.15, street_haircut=0.10,
         pb_spread=0.005, trs_spread=0.004, street_repo_spread=0.003,
         upgrade_haircut=0.10, upgrade_fee=0.003, aim_listed=False,
@@ -360,3 +362,56 @@ def test_default_capital_inputs():
     assert c.include_street_leg and not c.trs_margined and c.trs_mtm == 0.0
     assert default_capital_inputs("small_cap").haircut_class == "other_listed"
     assert not default_capital_inputs("convertible_style").lcr_level2b
+
+
+# --- Shadow cost k sensitivity -------------------------------------------------------
+
+def test_k_grid():
+    g = k_grid()
+    assert g[0] == 0.0 and g[-1] == approx(0.03) and len(g) == 13  # 0 to 3% in 0.25% steps
+
+
+def test_k_sensitivity_trs_at_73_days():
+    """TRS, tau 0.2, LE 13,003,516.91, a = 16,600, dealer net 24,600.
+    k = 0:    required = (0 - 16,600) / 2m = -0.83%
+    k = 1%:   required = (0.01 x 13,003,516.91 x 0.2 - 16,600) / 2m = 0.470352%
+    RoLE = 0.945898% for every k; RoLE - k at 1% = -0.054102%
+    """
+    df = k_sensitivity(fin(tenor_days=73, holding_period_days=73), cap(), [0.0, 0.01])
+    t = df[df["route"] == "TRS"].set_index("k")
+    assert t.loc[0.0, "required_spread_role"] == approx(-0.0083)
+    assert t.loc[0.01, "required_spread_role"] == approx(0.00470352)
+    assert t.loc[0.0, "role"] == approx(0.00945898) and t.loc[0.01, "role"] == approx(0.00945898)
+    assert t.loc[0.01, "role_minus_k"] == approx(-0.00054102)
+    assert len(df) == 6  # 3 routes x 2 k values
+
+
+# --- TRS vs IM remuneration ------------------------------------------------------------
+
+def test_trs_vs_im_remuneration_at_73_days():
+    """tau 0.2, IM 1.5m, LE 13,003,516.91 (independent of the IM spread), k = 0.5%.
+    net(s) = 24,600 - 1.5m x (4% - s) x 0.2:  s=0 -> 12,600; s=2% -> 18,600; s=4% -> 24,600
+    RoLE(s=0) = 12,600 / (13,003,516.91 x 0.2) = 12,600 / 2,600,703.38 = 0.4844843%
+    required TRS spread at s=0: a = 12,600 - 8,000 = 4,600;
+      (0.005 x 13,003,516.91 x 0.2 - 4,600) / 2m = (13,003.52 - 4,600) / 2m = 0.420176%
+    """
+
+    x = fin(tenor_days=73, holding_period_days=73, shadow_cost_k=0.005)
+    df = trs_vs_im_remuneration(x, cap(), [0.0, 0.02, 0.04]).set_index("im_remuneration_spread")
+    assert list(df["dealer_net_gbp"]) == approx([12_600, 18_600, 24_600])
+    assert df.loc[0.0, "role"] == approx(0.004844843)
+    assert df.loc[0.0, "required_trs_spread_role"] == approx(0.00420176)
+
+
+def test_trs_im_spread_for_hurdle():
+    """k = 0.5%: target = 0.005 x 13,003,516.91 x 0.2 = 13,003.52
+    from s0 = 0 (net 12,600): s* = (13,003.517 - 12,600) / 300,000 = 0.1345056%
+    same answer from any starting spread; round trip hits RoLE = k."""
+
+    x = fin(tenor_days=73, holding_period_days=73, shadow_cost_k=0.005)
+    s = trs_im_spread_for_hurdle(replace(x, im_remuneration_spread=0.0), cap())
+    assert s == approx(0.001345056)
+    assert trs_im_spread_for_hurdle(replace(x, im_remuneration_spread=0.03), cap()) == approx(s)
+    df = capital_comparison(replace(x, im_remuneration_spread=s), cap()).set_index("route")
+    assert df.loc["TRS", "role"] == approx(0.005)
+    assert trs_im_spread_for_hurdle(replace(x, trs_im=0.0), cap()) is None

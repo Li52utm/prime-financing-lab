@@ -37,6 +37,14 @@ CLIENT_FUNDING_RATE = 0.0600
 # dealer is short cash. A cash surplus earns SONIA flat (see engine.funding_gap_cost).
 DEALER_UNSECURED_SPREAD = 0.0080
 
+# Own assumption: the client earns SONIA minus this spread on its TRS cash IM, paid by the
+# dealer. 0 = IM remunerated at SONIA flat. Slider range 0 to SONIA (SONIA = unremunerated).
+# TRS IM is the only cash margin in the model: PB margin is the client's own equity in the
+# stock, and every other haircut or over-collateralisation is posted in securities.
+IM_REMUNERATION_SPREAD = 0.0
+IM_REMUNERATION_SPREAD_MIN = 0.0
+IM_REMUNERATION_SPREAD_MAX = SONIA
+
 # --- Asset-class presets (all own assumptions, illustrative) --------------
 # pb_margin          client margin on the PB loan (fraction of notional)
 # trs_im             client initial margin on the TRS (cash, unremunerated)
@@ -96,7 +104,11 @@ GILT_BORROW_FEE = 0.0010  # own assumption: dealer's annual cost of sourcing the
 
 DIVIDEND = 0.015  # own assumption: one discrete gross dividend = 1.5% of notional
 EX_DIV_DAY = 45  # own assumption: ex-date 45 days after trade start
-TRS_PASS_THROUGH = 1.00  # own assumption: 100% of gross dividend passed to TRS client
+# Own assumption: 100% of the gross dividend is passed to the TRS client, the norm for UK
+# stocks with no withholding tax. For foreign stocks, a pass-through below 100%, or a
+# dealer WHT rate below the rate implied by the pass-through (e.g. treaty relief), leaves
+# the dealer a dividend pickup: gross x (1 - wht_dealer - pass_through).
+TRS_PASS_THROUGH = 1.00
 MANUFACTURED_PASS_THROUGH = 1.00  # own assumption: 100% manufactured dividend on lent stock
 WHT_CLIENT = 0.00  # public: the UK levies no withholding tax on dividends (HMRC)
 WHT_DEALER = 0.00  # public: as above, for UK stocks
@@ -117,6 +129,7 @@ DEALER_HEDGE_SDRT_RATE = 0.0
 SHADOW_COST_K = 0.005
 SHADOW_COST_K_MIN = 0.0  # slider bounds (own assumption)
 SHADOW_COST_K_MAX = 0.030
+SHADOW_COST_K_STEP = 0.0025  # own assumption: slider step and sensitivity grid spacing
 
 
 # =============================================================================

@@ -430,6 +430,65 @@ def pb_rwa_by_margin(x: FinancingInputs, c: CapitalInputs, margins: list[float])
     return pd.DataFrame(rows)
 
 
+def k_grid() -> list[float]:
+    """Shadow cost k from SHADOW_COST_K_MIN to SHADOW_COST_K_MAX in SHADOW_COST_K_STEP steps."""
+    n = round((A.SHADOW_COST_K_MAX - A.SHADOW_COST_K_MIN) / A.SHADOW_COST_K_STEP)
+    return [round(A.SHADOW_COST_K_MIN + i * A.SHADOW_COST_K_STEP, 6) for i in range(n + 1)]
+
+
+def k_sensitivity(x: FinancingInputs, c: CapitalInputs, ks: list[float] | None = None) -> pd.DataFrame:
+    """For each k and route: gross RoLE (does not depend on k), RoLE minus k, and the spread
+    at which gross RoLE equals k. Long format: one row per (route, k)."""
+    frames = []
+    for k in ks if ks is not None else k_grid():
+        df = capital_comparison(replace(x, shadow_cost_k=k), c)
+        frames.append(pd.DataFrame({
+            "route": df["route"],
+            "k": k,
+            "role": df["role"],
+            "role_minus_k": df["role"] - k,
+            "required_spread_role": df["required_spread_role"],
+            "current_spread": df["current_spread"],
+        }))
+    return pd.concat(frames, ignore_index=True)
+
+
+def trs_im_spread_for_hurdle(x: FinancingInputs, c: CapitalInputs) -> float | None:
+    """IM remuneration spread at which TRS gross RoLE equals the hurdle k.
+
+    Dealer net is linear in the IM spread s: net(s) = net(s0) + N * trs_im * (s - s0) * tau.
+    Leverage exposure does not depend on s. Solve net(s) = k * LE * tau.
+    The result can fall outside the 0-to-SONIA slider range; the caller should flag that.
+    """
+    base = x.notional * x.trs_im
+    if base <= 0:
+        return None
+    tau = year_fraction(x.tenor_days)
+    net = trs_route(x).dealer_net
+    le = trs_capital(x, c).leverage_exposure
+    return x.im_remuneration_spread + (x.shadow_cost_k * le * tau - net) / (base * tau)
+
+
+def trs_vs_im_remuneration(x: FinancingInputs, c: CapitalInputs,
+                           spreads: list[float]) -> pd.DataFrame:
+    """TRS dealer net, gross RoLE, and the TRS spread needed for RoLE = k, per IM
+    remuneration spread."""
+    tau = year_fraction(x.tenor_days)
+    le = trs_capital(x, c).leverage_exposure
+    rows = []
+    for s in spreads:
+        xs = replace(x, im_remuneration_spread=s)
+        net = trs_route(xs).dealer_net
+        rows.append({
+            "im_remuneration_spread": s,
+            "dealer_net_gbp": net,
+            "role": return_on(net, le, tau),
+            "required_trs_spread_role": required_spread(net, xs.trs_spread, xs.notional, le,
+                                                        xs.shadow_cost_k, tau),
+        })
+    return pd.DataFrame(rows)
+
+
 def capital_comparison(x: FinancingInputs, c: CapitalInputs) -> pd.DataFrame:
     """One row per route. RoLE is the headline balance-sheet metric; the shadow cost k is
     charged on leverage exposure and is the RoLE hurdle. Required spreads are reported

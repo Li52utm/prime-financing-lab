@@ -27,6 +27,7 @@ def base(**overrides) -> FinancingInputs:
     x = FinancingInputs(
         notional=10_000_000, tenor_days=73, holding_period_days=73, sonia=0.04,
         client_funding_rate=0.06, unsecured_spread=0.01,
+        im_remuneration_spread=0.04,  # = SONIA: IM unremunerated (keeps step 1 numbers)
         pb_margin=0.20, trs_im=0.15, street_haircut=0.10,
         pb_spread=0.005, trs_spread=0.004, street_repo_spread=0.003,
         upgrade_haircut=0.10, upgrade_fee=0.003, aim_listed=False,
@@ -275,3 +276,80 @@ def test_default_inputs_from_assumptions():
     assert default_inputs("small_cap").aim_listed
     assert pb_route(default_inputs("small_cap")).sdrt == 0.0
     assert default_inputs(tenor="1M", notional=5e6).notional == 5e6
+
+
+# --- Dealer net decomposition ------------------------------------------------------
+
+def test_dealer_parts_pb():
+    # SONIA 8m x 4% x 0.2 = 64,000; spread 8m x 0.5% x 0.2 = 8,000; street -9m x 4.3% x 0.2 = -77,400
+    # cash gap: surplus 1m earns 8,000 -> total 2,600
+    p = pb_route(base()).dealer_parts
+    assert p["sonia_from_client"] == approx(64_000)
+    assert p["spread_income"] == approx(8_000)
+    assert p["street_funding"] == approx(-77_400)
+    assert p["cash_gap"] == approx(8_000)
+    assert p["dividend_pickup"] == 0.0
+    assert sum(p.values()) == approx(pb_route(base()).dealer_net)
+
+
+def test_dealer_parts_trs():
+    # SONIA 10m x 4% x 0.2 = 80,000; spread 10m x 0.4% x 0.2 = 8,000; street -77,400
+    # cash gap: surplus 0.5m earns 4,000; dividend pickup 100,000 - 90% x 100,000 = 10,000
+    p = trs_route(base()).dealer_parts
+    assert p == approx({"sonia_from_client": 80_000, "spread_income": 8_000,
+                        "street_funding": -77_400, "cash_gap": 4_000, "im_remuneration": 0.0,
+                        "dividend_pickup": 10_000, "hedge_sdrt": 0.0, "gilt_borrow": 0.0})
+    assert sum(p.values()) == approx(24_600)
+
+
+def test_dealer_parts_trs_full_pass_through_and_hedge_sdrt():
+    # 100% pass-through -> pickup 0; hedge SDRT 0.5% x 10m = -50,000
+    p = trs_route(base(trs_pass_through=1.0, dealer_hedge_sdrt_rate=0.005)).dealer_parts
+    assert p["dividend_pickup"] == 0.0
+    assert p["hedge_sdrt"] == approx(-50_000)
+    assert sum(p.values()) == approx(80_000 + 8_000 - 77_400 + 4_000 - 50_000)
+
+
+def test_dealer_parts_upgrade():
+    # fee 6,000; gilt borrow -9m x 0.1% x 0.2 = -1,800; pickup 100,000 - 100,000 = 0
+    p = upgrade_route(base()).dealer_parts
+    assert p["spread_income"] == approx(6_000)
+    assert p["gilt_borrow"] == approx(-1_800)
+    assert p["street_funding"] == 0.0
+    assert sum(p.values()) == approx(4_200)
+
+
+# --- IM remuneration (TRS cash IM is the only cash margin in the model) ---------------
+
+def test_im_remuneration_matches_on_both_sides():
+    # IM 1.5m at SONIA flat (spread 0): 1.5m x 4% x 0.2 = 12,000
+    # client financing 106,000 - 12,000 = 94,000; dealer net 24,600 - 12,000 = 12,600
+    paid = trs_route(base(im_remuneration_spread=0.0))
+    unpaid = trs_route(base())
+    assert paid.dealer_parts["im_remuneration"] == approx(-12_000)
+    assert paid.financing_cost == approx(94_000)
+    assert paid.dealer_net == approx(12_600)
+    client_saving = unpaid.financing_cost - paid.financing_cost
+    dealer_cost = unpaid.dealer_net - paid.dealer_net
+    assert client_saving == approx(dealer_cost) == approx(12_000)
+
+
+def test_im_remuneration_with_spread():
+    # SONIA - 1% = 3%: 1.5m x 3% x 0.2 = 9,000
+    assert trs_route(base(im_remuneration_spread=0.01)).dealer_parts["im_remuneration"] == \
+        approx(-9_000)
+
+
+def test_im_remuneration_does_not_touch_pb_or_upgrade():
+    for route in (pb_route, upgrade_route):
+        assert route(base(im_remuneration_spread=0.0)).dealer_net == approx(route(base()).dealer_net)
+        assert route(base(im_remuneration_spread=0.0)).dealer_parts["im_remuneration"] == 0.0
+
+
+def test_breakeven_trs_spread_with_im_remuneration():
+    # client TRS cost falls by 12,000, so the breakeven spread rises by 12,000 / 2m = 0.6%
+    # 0.019 + 0.006 = 0.025
+    x = base(im_remuneration_spread=0.0)
+    s = breakeven_trs_spread(x)
+    assert s == approx(0.025)
+    assert trs_route(replace(x, trs_spread=s)).net_cost == approx(pb_route(x).net_cost)

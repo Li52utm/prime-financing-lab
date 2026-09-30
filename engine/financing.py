@@ -27,6 +27,7 @@ class FinancingInputs:
     sonia: float
     client_funding_rate: float
     unsecured_spread: float
+    im_remuneration_spread: float  # client earns SONIA minus this on TRS cash IM
     # asset-class terms
     pb_margin: float
     trs_im: float
@@ -65,6 +66,7 @@ def default_inputs(asset_class: str = A.DEFAULT_ASSET_CLASS, tenor: str = A.DEFA
         sonia=A.SONIA,
         client_funding_rate=A.CLIENT_FUNDING_RATE,
         unsecured_spread=A.DEALER_UNSECURED_SPREAD,
+        im_remuneration_spread=A.IM_REMUNERATION_SPREAD,
         **A.ASSET_CLASSES[asset_class],
         gilt_repo_spread=A.GILT_REPO_SPREAD,
         gilt_haircut=A.GILT_HAIRCUT,
@@ -92,13 +94,30 @@ class RouteResult:
     sdrt_one_off: float  # full SDRT paid on purchase (0 if off, AIM, or TRS)
     sdrt: float  # amortised SDRT charged to this tenor, included in financing_cost
     financing_cost_ex_sdrt: float
-    dealer_net: float
+    dealer_net: float  # sum of dealer_parts
+    dealer_parts: dict  # DEALER_PART_NAMES -> GBP over the tenor
     balance_sheet: float
     balance_sheet_off_sheet: bool
     shadow_cost: float  # reported separately; NOT deducted from ROBS
     robs: float | None  # gross annualised return on balance sheet
     spread_name: str  # the dealer pricing lever for this route
     required_spread: float | None  # spread at which gross ROBS == shadow_cost_k
+
+
+DEALER_PART_NAMES = (
+    "sonia_from_client",  # SONIA leg received on the loan / TRS notional
+    "spread_income",  # client spread or upgrade fee
+    "street_funding",  # street repo at SONIA + street spread (negative)
+    "cash_gap",  # surplus earns SONIA; shortfall pays SONIA + unsecured spread
+    "im_remuneration",  # interest paid to the client on TRS cash IM (negative)
+    "dividend_pickup",  # dividend kept net of WHT minus amount passed to the client
+    "hedge_sdrt",  # SDRT on the dealer's TRS hedge (negative)
+    "gilt_borrow",  # cost of sourcing gilts in the upgrade (negative)
+)
+
+
+def _dealer_parts(**parts: float) -> dict:
+    return {name: parts.get(name, 0.0) for name in DEALER_PART_NAMES}
 
 
 # --- Helpers ----------------------------------------------------------------
@@ -129,6 +148,12 @@ def funding_gap_cost(gap: float, sonia: float, unsecured_spread: float, tau: flo
     if gap > 0:
         return gap * (sonia + unsecured_spread) * tau
     return gap * sonia * tau
+
+
+def im_remuneration(x: "FinancingInputs", tau: float) -> float:
+    """Interest the dealer pays the client on TRS cash IM: N * trs_im * (SONIA - spread) * tau.
+    It reduces the client's cost and the dealer's net by the same amount."""
+    return x.notional * x.trs_im * (x.sonia - x.im_remuneration_spread) * tau
 
 
 def shadow_bs_cost(balance_sheet: float, k: float, tau: float) -> float:
@@ -203,8 +228,13 @@ def pb_route(x: FinancingInputs) -> RouteResult:
     client_div = net_dividend(_dividend_amount(x), x.wht_client)
 
     gap = x.notional * (x.street_haircut - x.pb_margin)
-    dealer_net = (interest - _street_repo_cost(x, tau)
-                  - funding_gap_cost(gap, x.sonia, x.unsecured_spread, tau))
+    parts = _dealer_parts(
+        sonia_from_client=loan * x.sonia * tau,
+        spread_income=loan * x.pb_spread * tau,
+        street_funding=-_street_repo_cost(x, tau),
+        cash_gap=-funding_gap_cost(gap, x.sonia, x.unsecured_spread, tau),
+    )
+    dealer_net = sum(parts.values())
 
     return RouteResult(
         route="PB",
@@ -215,6 +245,7 @@ def pb_route(x: FinancingInputs) -> RouteResult:
         sdrt=sdrt,
         financing_cost_ex_sdrt=financing_cost - sdrt,
         dealer_net=dealer_net,
+        dealer_parts=parts,
         balance_sheet=loan,
         balance_sheet_off_sheet=False,
         shadow_cost=shadow_bs_cost(loan, x.shadow_cost_k, tau),
@@ -226,21 +257,29 @@ def pb_route(x: FinancingInputs) -> RouteResult:
 
 def trs_route(x: FinancingInputs) -> RouteResult:
     """TRS: the client pays SONIA + trs_spread on N, receives pass-through x gross dividend,
-    and posts cash IM. The dealer buys the hedge, repos it, and funds N(street_haircut - trs_im)."""
+    and posts cash IM, which earns SONIA - im_remuneration_spread. The dealer buys the hedge,
+    repos it, and funds N(street_haircut - trs_im)."""
     tau = year_fraction(x.tenor_days)
     floating = x.notional * (x.sonia + x.trs_spread) * tau
     im_cost = x.notional * x.trs_im * x.client_funding_rate * tau
+    im_interest = im_remuneration(x, tau)
     gross_div = _dividend_amount(x)
     passed_div = x.trs_pass_through * gross_div
-    financing_cost = floating + im_cost
+    financing_cost = floating + im_cost - im_interest
 
     gap = x.notional * (x.street_haircut - x.trs_im)
     # UNVERIFIED: dealer hedge SDRT treatment (intermediary relief); see assumptions.py
     hedge_sdrt = x.notional * x.dealer_hedge_sdrt_rate if _sdrt_applies(x) else 0.0
-    dealer_net = (floating - _street_repo_cost(x, tau)
-                  - funding_gap_cost(gap, x.sonia, x.unsecured_spread, tau)
-                  + net_dividend(gross_div, x.wht_dealer) - passed_div
-                  - hedge_sdrt)
+    parts = _dealer_parts(
+        sonia_from_client=x.notional * x.sonia * tau,
+        spread_income=x.notional * x.trs_spread * tau,
+        street_funding=-_street_repo_cost(x, tau),
+        cash_gap=-funding_gap_cost(gap, x.sonia, x.unsecured_spread, tau),
+        im_remuneration=-im_interest if im_interest else 0.0,
+        dividend_pickup=net_dividend(gross_div, x.wht_dealer) - passed_div,
+        hedge_sdrt=-hedge_sdrt if hedge_sdrt else 0.0,
+    )
+    dealer_net = sum(parts.values())
 
     return RouteResult(
         route="TRS",
@@ -251,6 +290,7 @@ def trs_route(x: FinancingInputs) -> RouteResult:
         sdrt=0.0,
         financing_cost_ex_sdrt=financing_cost,
         dealer_net=dealer_net,
+        dealer_parts=parts,
         balance_sheet=x.notional,
         balance_sheet_off_sheet=False,
         shadow_cost=shadow_bs_cost(x.notional, x.shadow_cost_k, tau),
@@ -277,8 +317,12 @@ def upgrade_route(x: FinancingInputs) -> RouteResult:
     gross_div = _dividend_amount(x)
     manufactured = x.manufactured_pass_through * gross_div
 
-    dealer_net = (fee - gilts * x.gilt_borrow_fee * tau
-                  + net_dividend(gross_div, x.wht_dealer) - manufactured)
+    parts = _dealer_parts(
+        spread_income=fee,
+        dividend_pickup=net_dividend(gross_div, x.wht_dealer) - manufactured,
+        gilt_borrow=-gilts * x.gilt_borrow_fee * tau,
+    )
+    dealer_net = sum(parts.values())
 
     # Off the accounting balance sheet (securities for securities), so accounting ROBS and
     # its required fee are None. The leverage exposure, which depends on how the dealer
@@ -294,6 +338,7 @@ def upgrade_route(x: FinancingInputs) -> RouteResult:
         sdrt=sdrt,
         financing_cost_ex_sdrt=financing_cost - sdrt,
         dealer_net=dealer_net,
+        dealer_parts=parts,
         balance_sheet=balance_sheet,
         balance_sheet_off_sheet=True,
         shadow_cost=shadow_bs_cost(balance_sheet, x.shadow_cost_k, tau),
@@ -311,13 +356,14 @@ def breakeven_trs_spread(x: FinancingInputs) -> float:
 
     Net cost (financing - dividend credit) is used because dividend treatment differs by route.
     SDRT follows x.include_sdrt and is amortised over x.holding_period_days.
-    Solve N(r + s)tau + N*trs_im*r_c*tau - p*div = NetCost_PB for s.
+    Solve N(r + s)tau + N*trs_im*r_c*tau - IM remuneration - p*div = NetCost_PB for s.
     """
     tau = year_fraction(x.tenor_days)
     cost_pb = pb_route(x).net_cost
     im_cost = x.notional * x.trs_im * x.client_funding_rate * tau
     passed_div = x.trs_pass_through * _dividend_amount(x)
-    return (cost_pb - x.notional * x.sonia * tau - im_cost + passed_div) / (x.notional * tau)
+    return ((cost_pb - x.notional * x.sonia * tau - im_cost + im_remuneration(x, tau)
+             + passed_div) / (x.notional * tau))
 
 
 def compare_routes(x: FinancingInputs) -> pd.DataFrame:
