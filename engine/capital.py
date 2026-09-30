@@ -542,6 +542,9 @@ def capital_comparison(x: FinancingInputs, c: CapitalInputs) -> pd.DataFrame:
             "required_spread_rorwa": s_rwa,
             "required_spread_role": s_le,
             "binding": binding,
+            # Break-even k: the balance-sheet charge at which the route just clears, which is
+            # its gross RoLE. Lead metric on the Summary page, ahead of clears / misses.
+            "break_even_k": role,
             # Hurdle clearance: clears if gross RoLE >= k. Cushion in bp of spread is
             # current minus required (negative = spread shortfall to reach the hurdle).
             "clears_role_hurdle": None if role is None else bool(role >= x.shadow_cost_k),

@@ -125,15 +125,15 @@ def test_price_shock_table_default_grid():
 def test_stress_comparison_day_of_shock():
     # PB not repriced: 2,600 - street 9m x 0.3% x 0.2 (5,400) = -2,800
     # TRS repriced: 24,600 + 10m x 0.2% x 0.2 (4,000) - 5,400 = 23,200
-    # upgrade (reverse repo) base: fee 6,000 - street 77,400 + reverse repo 8.82m x 4% x 0.2
-    #   (70,560) + surplus 0.18m x 4% x 0.2 (1,440) - gilt borrow 1,800 = -1,200
-    # stressed: + fee 4,000 - street 5,400 = -2,600
+    # upgrade (reverse repo, no borrow fee) base: fee 6,000 - street 77,400
+    #   + reverse repo 8.82m x 4% x 0.2 (70,560) + surplus 0.18m x 4% x 0.2 (1,440) = 600
+    # stressed: + fee 4,000 - street 5,400 = -800
     df = stress_comparison(fin73(), cap(), T).set_index("route")
     assert df.loc["PB", "dealer_net_stressed"] == approx(-2_800)
     assert df.loc["PB", "dealer_net_change"] == approx(-5_400)
     assert df.loc["TRS", "dealer_net_stressed"] == approx(23_200)
-    assert df.loc["Collateral upgrade", "dealer_net_base"] == approx(-1_200)
-    assert df.loc["Collateral upgrade", "dealer_net_stressed"] == approx(-2_600)
+    assert df.loc["Collateral upgrade", "dealer_net_base"] == approx(600)
+    assert df.loc["Collateral upgrade", "dealer_net_stressed"] == approx(-800)
     assert df.loc["TRS", "k_stressed"] == approx(0.03)
     assert df.loc["TRS", "leverage_stressed"] == approx(df.loc["TRS", "leverage_base"])
 
@@ -230,3 +230,53 @@ def test_repricing_gap_after_full_repricing():
     # full repricing: -10,000 - (N - L) x shock x tau = -10,000 - 2m x 0.2% x 0.2 = -10,800
     df = repricing_path(fin73(), T, months=3, fraction_per_month=0.5, month_days=73)
     assert df["cost_gap"].iloc[-1] == approx(-10_000 - (10e6 - 8e6) * 0.002 * 0.2)
+
+
+# --- Full-tenor vs turn-only views -------------------------------------------------------
+
+def test_full_tenor_view_is_labelled_and_costs_street_shock_for_tenor():
+    # street shock cost over the tenor: 9m x 0.3% x 73 / 365 = 5,400 (as before)
+    df = stress_comparison(fin73(), cap(), T).set_index("route")
+    assert (df["view_label"] == "If the shock persisted for the whole tenor").all()
+    assert (df["street_shock_days"] == 73).all()
+    assert df.loc["PB", "street_shock_cost"] == approx(5_400)
+
+
+def test_turn_only_view():
+    """Turn 10 days: street shock cost = 9m x 0.3% x 10 / 365 = 739.73 (term_vs_rolling
+    rolling cost of the shock alone). Other shocks (client spread, k) still apply.
+    PB  (not repriced): 2,600 - 739.73 = 1,860.27
+    TRS (repriced):     24,600 + 4,000 - 739.73 = 27,860.27
+    upgrade (reverse repo, repriced): 600 + 4,000 - 739.73 = 3,860.27
+    TRS RoLE = 27,860.27 / (13,003,516.91 x 0.2) = 1.0712592%
+    TRS required at k 3%: a = 27,860.27 - 10m x 0.6% x 0.2 = 15,860.27
+      (0.03 x 13,003,516.91 x 0.2 - 15,860.27) / 2m = 3.1080414%
+    """
+    df = stress_comparison(fin73(), cap(), T, view="turn_only").set_index("route")
+    assert (df["view_label"] == "Street shock for the turn days only").all()
+    assert (df["street_shock_days"] == 10).all()
+    assert df.loc["PB", "street_shock_cost"] == approx(739.726027)
+    assert df.loc["PB", "dealer_net_stressed"] == approx(1_860.273973)
+    assert df.loc["TRS", "dealer_net_stressed"] == approx(27_860.273973)
+    assert df.loc["Collateral upgrade", "dealer_net_stressed"] == approx(3_860.273973)
+    assert df.loc["TRS", "role_stressed"] == approx(0.010712592)
+    assert df.loc["TRS", "required_spread_role_stressed"] == approx(0.031080414)
+
+
+def test_turn_longer_than_tenor_equals_full_view():
+    long_turn = replace(T, turn_days=200)
+    full = stress_comparison(fin73(), cap(), long_turn).set_index("route")
+    turn = stress_comparison(fin73(), cap(), long_turn, view="turn_only").set_index("route")
+    assert list(turn["dealer_net_stressed"]) == approx(list(full["dealer_net_stressed"]))
+    assert list(turn["required_spread_role_stressed"]) == approx(
+        list(full["required_spread_role_stressed"]))
+
+
+def test_turn_view_borrowed_upgrade_has_no_street_cost():
+    df = stress_comparison(fin73(gilt_source="borrowed"), cap(), T, view="turn_only")
+    assert df.set_index("route").loc["Collateral upgrade", "street_shock_cost"] == 0.0
+
+
+def test_unknown_view():
+    with pytest.raises(ValueError):
+        stress_comparison(fin73(), cap(), T, view="forever")

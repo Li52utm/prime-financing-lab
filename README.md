@@ -44,25 +44,29 @@ All presets and shocks are **hypothetical own assumptions** in `assumptions.py`.
   - the SA-CCR adjusted notional. Under PRA CCR (CRR) Art 279b(1)(c), an equity adjusted notional is market price × number of units. A TRS expressed as a fixed GBP notional keeps its notional; this is a toggle, and the default is a TRS on a number of shares.
 
   The street repo cash and the client's IM stay at their original amounts. The page shows RC, multiplier, EAD, RWA and leverage exposure.
-- **Presets:** `quarter_end_squeeze`, `year_end_turn` and `collateral_shortage`. Each one shocks:
+- **Presets:** `quarter_end_squeeze`, `year_end_turn` and `collateral_shortage`. There are two views:
+  - **full tenor**, labelled "If the shock persisted for the whole tenor": every shock applies for the whole tenor.
+  - **turn only**: the street spread shock is paid only for the preset's turn days, costed with the term-vs-rolling formula. The other shocks still apply for the tenor.
+
+  Each preset shocks:
   - the client spread
   - the street spread
   - the shadow cost k
   - the street haircut
   - the gilt borrow fee
-- **Pass-through lag:** the TRS spread reprices fully at once. The on-sheet PB spread reprices by a fraction per month (default 25%, capped at 100%). The dealer's street costs are hit immediately. The page shows the month-by-month client cost gap (PB − TRS) and the dealer's PB shortfall.
+- **Pass-through lag:** the shock persists for the whole path. The TRS spread reprices fully at once. The on-sheet PB spread reprices by a fraction per month (default 25%, capped at 100%). The dealer's street costs are hit immediately. The page shows the month-by-month client cost gap (PB − TRS) and the dealer's PB shortfall.
   - After PB has fully repriced, the gap does **not** return to its pre-shock level. PB reprices on its loan L = N(1 − margin) and the TRS on the full N, so the gap = base gap − (N − L) × client shock × τ.
 - **Term vs rolling:** the dealer's street funding either locks a term spread (base + term premium) or rolls and pays the shock for the turn days. The page shows the breakeven term premium = shock × turn days / horizon.
 
 ## Collateral upgrade dealer P&L
 
 The upgrade's dealer P&L matches the capital model's gilt source.
-- **`reverse_repo`:** the dealer earns the fee; pays street funding on the repo of the client's equities; earns the gilt reverse-repo rate on R = G(1 − gilt haircut); earns SONIA on any surplus cash (or pays for a shortfall); and pays the gilt borrow fee.
-- **`borrowed` / `inventory`:** fee minus gilt borrow.
+- **`reverse_repo`:** the dealer earns the fee; pays street funding on the repo of the client's equities; earns the gilt reverse-repo rate on R = G(1 − gilt haircut); and earns SONIA on any surplus cash (or pays for a shortfall). **Own assumption:** no gilt borrow fee by default (`GILT_BORROW_FEE_REVERSE_REPO = 0`). The gilts are sourced at the reverse repo rate, so a fee would double count. It remains an input.
+- **`borrowed` / `inventory`:** fee minus gilt borrow fee (`GILT_BORROW_FEE`). The preset gilt borrow shock applies to this fee only.
 
 ## Hurdle clearance
 
-Each route reports whether its gross RoLE clears the hurdle k, and by how many bp of spread (current spread − required spread). The Summary page names a "best for desk" route only among routes that clear. If none clears, it says so.
+**Break-even k** is the lead metric: the balance-sheet charge at which the route just clears, equal to its gross RoLE. Each route also reports whether its gross RoLE clears the hurdle k, and by how many bp of spread (current spread − required spread). The Summary page names a "best for desk" route only among routes that clear. If none clears, it says so.
 
 ## Not modelled
 

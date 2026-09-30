@@ -98,7 +98,12 @@ DEFAULT_ASSET_CLASS = "large_cap"
 
 GILT_REPO_SPREAD = 0.0000  # own assumption: gilt repo at roughly SONIA flat
 GILT_HAIRCUT = 0.02  # own assumption: haircut when client repos the gilts it received
-GILT_BORROW_FEE = 0.0010  # own assumption: dealer's annual cost of sourcing the gilts
+# Own assumption: dealer's annual fee for borrowing the gilts (borrowed source) or the
+# opportunity cost of lending its own (inventory source).
+GILT_BORROW_FEE = 0.0010
+# Own assumption: no separate borrow fee when the gilts are reversed in (reverse_repo
+# source). They are sourced at the reverse repo rate, so a fee would double count.
+GILT_BORROW_FEE_REVERSE_REPO = 0.0
 
 # --- Dividends and tax ------------------------------------------------------
 

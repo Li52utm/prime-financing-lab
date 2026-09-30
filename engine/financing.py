@@ -42,7 +42,8 @@ class FinancingInputs:
     gilt_source: str  # how the dealer sources the gilts: one of GILT_SOURCES
     gilt_repo_spread: float  # gilt repo rate over SONIA (client's repo and dealer's reverse repo)
     gilt_haircut: float
-    gilt_borrow_fee: float
+    gilt_borrow_fee: float  # borrowed / inventory sources
+    gilt_borrow_fee_reverse_repo: float  # reverse_repo source (default 0)
     # dividends and tax
     dividend: float  # gross dividend as a fraction of notional
     ex_div_day: int  # days from trade start
@@ -73,6 +74,7 @@ def default_inputs(asset_class: str = A.DEFAULT_ASSET_CLASS, tenor: str = A.DEFA
         gilt_repo_spread=A.GILT_REPO_SPREAD,
         gilt_haircut=A.GILT_HAIRCUT,
         gilt_borrow_fee=A.GILT_BORROW_FEE,
+        gilt_borrow_fee_reverse_repo=A.GILT_BORROW_FEE_REVERSE_REPO,
         dividend=A.DIVIDEND,
         ex_div_day=A.EX_DIV_DAY,
         trs_pass_through=A.TRS_PASS_THROUGH,
@@ -306,6 +308,14 @@ def trs_route(x: FinancingInputs) -> RouteResult:
     )
 
 
+def _gilt_borrow_fee(x: FinancingInputs) -> float:
+    """reverse_repo uses gilt_borrow_fee_reverse_repo (default 0: the gilts come at the reverse
+    repo rate, so a fee would double count); borrowed and inventory use gilt_borrow_fee."""
+    if x.gilt_source == "reverse_repo":
+        return x.gilt_borrow_fee_reverse_repo
+    return x.gilt_borrow_fee
+
+
 def upgrade_route(x: FinancingInputs) -> RouteResult:
     """Collateral upgrade: the client buys the stock, lends it to the dealer for gilts
     G = N(1 - upgrade_haircut), and repos the gilts for cash C = G(1 - gilt_haircut).
@@ -315,8 +325,7 @@ def upgrade_route(x: FinancingInputs) -> RouteResult:
     - reverse_repo: earns the fee; repos the client's equities to the street for
       N(1 - h_st) at SONIA + street spread; reverses in the gilts for R = G(1 - gilt_haircut)
       at SONIA + gilt_repo_spread; the cash gap (raised - R) earns SONIA or costs
-      SONIA + unsecured spread; pays the gilt borrow fee on G (own assumption: sourcing
-      or specialness cost on top of the GC reverse repo rate).
+      SONIA + unsecured spread; pays gilt_borrow_fee_reverse_repo on G (default 0).
     - borrowed / inventory: fee minus gilt borrow fee on G (securities for securities).
     """
     if x.gilt_source not in GILT_SOURCES:
@@ -348,7 +357,7 @@ def upgrade_route(x: FinancingInputs) -> RouteResult:
     parts = _dealer_parts(
         spread_income=fee,
         dividend_pickup=net_dividend(gross_div, x.wht_dealer) - manufactured,
-        gilt_borrow=-gilts * x.gilt_borrow_fee * tau,
+        gilt_borrow=0.0 - gilts * _gilt_borrow_fee(x) * tau,  # 0.0 - avoids a negative zero
         **legs,
     )
     dealer_net = sum(parts.values())

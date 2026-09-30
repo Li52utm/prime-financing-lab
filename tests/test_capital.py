@@ -39,6 +39,7 @@ def fin(**overrides) -> FinancingInputs:
         pb_spread=0.005, trs_spread=0.004, street_repo_spread=0.003,
         upgrade_haircut=0.10, upgrade_fee=0.003, aim_listed=False,
         gilt_source="reverse_repo", gilt_repo_spread=0.0, gilt_haircut=0.02, gilt_borrow_fee=0.001,
+        gilt_borrow_fee_reverse_repo=0.0,
         dividend=0.01, ex_div_day=30, trs_pass_through=0.9, manufactured_pass_through=1.0,
         wht_client=0.0, wht_dealer=0.0, include_sdrt=True, sdrt_rate=0.005,
         dealer_hedge_sdrt_rate=0.0, shadow_cost_k=0.02,
@@ -439,3 +440,16 @@ def test_hurdle_clearance_and_best_for_desk():
     assert not df.loc["PB", "clears_role_hurdle"]
     assert not df.loc["Collateral upgrade", "clears_role_hurdle"]
     assert best_for_desk(df.reset_index()) == "TRS"
+
+
+def test_break_even_k():
+    """Break-even k = gross RoLE. TRS at tau 0.2: 24,600 / (13,003,516.91 x 0.2) = 0.945898%.
+    At k = break-even the required spread equals the current spread (cushion 0) and it clears."""
+    x = fin(tenor_days=73, holding_period_days=73)
+    df = capital_comparison(x, cap()).set_index("route")
+    be = df.loc["TRS", "break_even_k"]
+    assert be == approx(0.00945898)
+    assert list(df["break_even_k"]) == approx(list(df["role"]))
+    at_be = capital_comparison(replace(x, shadow_cost_k=be), cap()).set_index("route")
+    assert at_be.loc["TRS", "role_hurdle_cushion_bp"] == approx(0.0, abs=1e-9)
+    assert at_be.loc["TRS", "clears_role_hurdle"]

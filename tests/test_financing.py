@@ -32,6 +32,7 @@ def base(**overrides) -> FinancingInputs:
         pb_spread=0.005, trs_spread=0.004, street_repo_spread=0.003,
         upgrade_haircut=0.10, upgrade_fee=0.003, aim_listed=False,
         gilt_source="borrowed", gilt_repo_spread=0.0, gilt_haircut=0.02, gilt_borrow_fee=0.001,
+        gilt_borrow_fee_reverse_repo=0.0,
         dividend=0.01, ex_div_day=30, trs_pass_through=0.9, manufactured_pass_through=1.0,
         wht_client=0.0, wht_dealer=0.0, include_sdrt=True, sdrt_rate=0.005,
         dealer_hedge_sdrt_rate=0.0, shadow_cost_k=0.02,
@@ -363,16 +364,16 @@ def test_upgrade_reverse_repo_dealer_parts():
     # street: repo client equities for 9m at 4.3%: -9m x 0.043 x 0.2 = -77,400
     # reverse repo: lend R = 9m x 0.98 = 8.82m at SONIA + 0: 8.82m x 0.04 x 0.2 = 70,560
     # cash gap: surplus 9m - 8.82m = 0.18m earns 0.18m x 0.04 x 0.2 = 1,440
-    # gilt borrow: -9m x 0.1% x 0.2 = -1,800; dividend pickup 0
-    # total = 6,000 - 77,400 + 70,560 + 1,440 - 1,800 = -1,200
+    # gilt borrow: reverse repo default fee 0 (no double count); dividend pickup 0
+    # total = 6,000 - 77,400 + 70,560 + 1,440 = 600
     r = upgrade_route(base(gilt_source="reverse_repo"))
     p = r.dealer_parts
     assert p["spread_income"] == approx(6_000)
     assert p["street_funding"] == approx(-77_400)
     assert p["gilt_reverse_repo"] == approx(70_560)
     assert p["cash_gap"] == approx(1_440)
-    assert p["gilt_borrow"] == approx(-1_800)
-    assert r.dealer_net == approx(-1_200)
+    assert p["gilt_borrow"] == 0.0
+    assert r.dealer_net == approx(600)
     assert r.balance_sheet == approx(9_000_000)  # 8.82m receivable + 0.18m surplus
     assert not r.balance_sheet_off_sheet
 
@@ -384,3 +385,13 @@ def test_upgrade_inventory_matches_borrowed_pnl():
 def test_upgrade_unknown_gilt_source():
     with pytest.raises(ValueError):
         upgrade_route(base(gilt_source="magic"))
+
+
+def test_upgrade_gilt_borrow_fee_by_source():
+    # borrowed uses gilt_borrow_fee 0.1%: -9m x 0.001 x 0.2 = -1,800
+    assert upgrade_route(base(gilt_source="borrowed")).dealer_parts["gilt_borrow"] ==         approx(-1_800)
+    # reverse repo ignores gilt_borrow_fee and uses its own (default 0); override 0.05%:
+    # -9m x 0.0005 x 0.2 = -900 -> 600 - 900 = -300
+    r = upgrade_route(base(gilt_source="reverse_repo", gilt_borrow_fee_reverse_repo=0.0005))
+    assert r.dealer_parts["gilt_borrow"] == approx(-900)
+    assert r.dealer_net == approx(-300)
