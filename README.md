@@ -34,6 +34,16 @@ All numbers are illustrative. They use public data and the author's own assumpti
   - Both required spreads are shown, and the binding one is flagged.
 - **RWA** = EAD × risk weight. Risk weights are inputs.
 
+## Step 3: stress lab (hypothetical)
+
+All presets and shocks are **hypothetical own assumptions** in `assumptions.py`. They are not forecasts.
+
+- **Price shock:** the stock move feeds the TRS mark-to-market V. The page shows replacement cost, multiplier, EAD, RWA and leverage exposure. Only V moves; the hedge and street repo stay at the static notional.
+- **Presets:** `quarter_end_squeeze`, `year_end_turn` and `collateral_shortage`. Each one shocks the client spread, the street spread, the shadow cost k and the street haircut.
+- **Pass-through lag:** the TRS spread reprices fully at once. The on-sheet PB spread reprices by a fraction per month (default 25%, capped at 100%). The dealer's street costs are hit immediately. The page shows the month-by-month client cost gap (PB − TRS) and the dealer's PB shortfall.
+- **Term vs rolling:** the dealer's street funding either locks a term spread (base + term premium) or rolls and pays the shock for the turn days. The page shows the breakeven term premium = shock × turn days / horizon.
+- **Limitation:** the upgrade's dealer net has no street funding line. Its only costs are the fee and gilt borrow, so street shocks don't reach it and it gains from the client repricing.
+
 ### Not modelled
 
 - **CVA risk capital: NOT MODELLED.**

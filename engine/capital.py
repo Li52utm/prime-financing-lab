@@ -178,7 +178,7 @@ def saccr_ead(v: float, nica: float, addon: float, margined: bool, vm: float = 0
 def trs_mtm_from_price_move(notional: float, price_move: float) -> float:
     """Dealer pays the equity return, so a fall in the stock is a gain to the dealer:
     V = -notional * price_move (price_move -0.20 means the stock falls 20%)."""
-    return -notional * price_move
+    return 0.0 - notional * price_move  # 0.0 - avoids a negative zero at no move
 
 
 # --- Leverage (PRA Leverage Ratio (CRR) Art 429-429e; Basel LEV30) ------------------

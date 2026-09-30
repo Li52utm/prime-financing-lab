@@ -234,3 +234,61 @@ TRS_MTM = 0.0  # dealer-side mark-to-market V at the calculation date
 # Own assumption: gross annual return on RWA the desk needs.
 TARGET_RORWA = 0.015
 # Return on leverage exposure hurdle = SHADOW_COST_K (above).
+
+
+# =============================================================================
+# Step 3: stress. Every value below is HYPOTHETICAL and an own assumption, chosen
+# only to illustrate the mechanics. None is a forecast or taken from any private source.
+# =============================================================================
+
+# Stock price moves for the TRS mark-to-market grid (hypothetical).
+PRICE_SHOCK_GRID = [-0.30, -0.20, -0.10, 0.0, 0.10, 0.20]
+
+# Stress presets (all HYPOTHETICAL own assumptions).
+# client_spread_shock    market repricing of client spreads (PB spread, TRS spread, upgrade fee)
+# street_spread_shock    rise in the dealer's street repo spread, hits the dealer immediately
+# k_shock                rise in the shadow cost of balance sheet k
+# street_haircut_change  change in the street repo haircut on equities
+# turn_days              how long a roller pays the street spread shock (term vs rolling)
+# term_premium           extra spread a term lender charges over the whole horizon to lock
+STRESS_PRESETS = {
+    "quarter_end_squeeze": {
+        "label": "Quarter-end squeeze (hypothetical)",
+        "client_spread_shock": 0.0010,
+        "street_spread_shock": 0.0025,
+        "k_shock": 0.0025,
+        "street_haircut_change": 0.00,
+        "turn_days": 5,
+        "term_premium": 0.0002,
+    },
+    "year_end_turn": {
+        "label": "Year-end turn (hypothetical)",
+        "client_spread_shock": 0.0025,
+        "street_spread_shock": 0.0060,
+        "k_shock": 0.0050,
+        "street_haircut_change": 0.02,
+        "turn_days": 10,
+        "term_premium": 0.0006,
+    },
+    "collateral_shortage": {
+        "label": "Collateral shortage (hypothetical)",
+        "client_spread_shock": 0.0015,
+        "street_spread_shock": 0.0040,
+        "k_shock": 0.0010,
+        "street_haircut_change": 0.05,
+        "turn_days": 30,
+        "term_premium": 0.0010,
+    },
+}
+
+# Pass-through lag (hypothetical own assumptions).
+# The TRS spread reprices fully at once. The on-sheet PB spread reprices by this fraction
+# of the client spread shock per month, cumulative and capped at 100% (0.25 = full in 4 months).
+PB_REPRICING_FRACTION_PER_MONTH = 0.25
+# Own assumption: the upgrade fee reprices fully at once, like the TRS.
+UPGRADE_REPRICING_FRACTION = 1.0
+MONTH_DAYS = 30  # own assumption: one month = 30 days (ACT/365), as the 1M tenor
+REPRICING_HORIZON_MONTHS = 6  # own assumption: months shown on the repricing chart
+
+# Term vs rolling (own assumption): horizon over which a term spread is locked.
+TERM_HORIZON_DAYS = 91
