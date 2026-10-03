@@ -9,8 +9,7 @@ A Streamlit dashboard that compares three ways to finance a long equity position
 For each route it shows the **client's all-in cost** and the **dealer's return on balance sheet**. The audience is a repo / equity-finance desk.
 
 ## Data and confidentiality
-- Use only public data and the user's own assumptions.
-- **Never read, reference, quote or infer from anything in `notes_private/`.** It is git-ignored and off-limits.
+Public data and own assumptions only.
 
 ## Regulatory treatment
 - All regulatory numbers (RWA, SA-CCR-style add-ons, leverage exposure) are **illustrative and simplified**. Label them that way in code comments, chart titles and captions, the app UI and the README.
