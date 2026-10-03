@@ -217,3 +217,88 @@ def test_clearance_sentence_never_clears():
     s = clearance_sentence("Collateral upgrade", row, 0.005)
     assert s == ("Collateral upgrade needs 85 bp to clear k = 50 bp (quoted 30 bp); at its quoted "
                  "fee it clears at no k ≥ 0.")
+
+
+# --- Live SONIA in the sidebar (network mocked by conftest / per test) -----------------------
+
+from datetime import date, timedelta  # noqa: E402
+
+from data import sonia as sonia_mod  # noqa: E402
+from ui.common import FALLBACK_SONIA_NOTE  # noqa: E402
+
+
+def sidebar_text(at: AppTest) -> str:
+    return " ".join(m.value for m in at.sidebar.markdown)
+
+
+def sidebar_warnings(at: AppTest) -> list[str]:
+    return [w.value for w in at.sidebar.warning]
+
+
+def header_caption(at: AppTest) -> str:
+    return " ".join(c.value for c in at.caption)
+
+
+def test_sidebar_sonia_live(monkeypatch):
+    as_of = date.today()
+    monkeypatch.setattr(sonia_mod, "fetch_latest_sonia",
+                        lambda **kw: (0.037329, as_of, sonia_mod.BOE_SOURCE))
+    at = AppTest.from_file(APP, default_timeout=90)
+    at.run()
+    assert not at.exception
+    text = sidebar_text(at)
+    assert "**3.7329%**" in text
+    assert f"As of: {as_of.strftime('%d %b %Y')}" in text
+    assert "Source: Bank of England IADB (IUDSOIA)" in text
+    assert "Status: **live**" in text
+    assert not sidebar_warnings(at)  # fresh live value: no warning
+    assert f"SONIA 3.7329% as of {as_of.strftime('%d %b %Y')} (Bank of England IADB (IUDSOIA), " \
+           "live)" in header_caption(at)
+    assert not any(FALLBACK_SONIA_NOTE in w.value for w in at.warning)
+    assert sonia_mod.read_cache(sonia_mod.CACHE_PATH)[0] == pytest.approx(0.037329)
+
+
+def test_sidebar_sonia_live_but_stale_warns(monkeypatch):
+    as_of = date.today() - timedelta(days=21)
+    monkeypatch.setattr(sonia_mod, "fetch_latest_sonia",
+                        lambda **kw: (0.0373, as_of, sonia_mod.BOE_SOURCE))
+    at = AppTest.from_file(APP, default_timeout=90)
+    at.run()
+    assert "Status: **live**" in sidebar_text(at)
+    assert any("more than 5 business days old" in w for w in sidebar_warnings(at))
+
+
+def test_sidebar_sonia_cached():
+    sonia_mod.write_cache(0.0372, date(2026, 9, 21), sonia_mod.FRED_SOURCE, sonia_mod.CACHE_PATH)
+    at = AppTest.from_file(APP, default_timeout=90)
+    at.run()  # conftest: live fetch fails
+    assert not at.exception
+    text = sidebar_text(at)
+    assert "**3.7200%**" in text and "As of: 21 Sep 2026" in text
+    assert "Source: FRED (IUDSOIA)" in text and "Status: **cached**" in text
+    assert any("Live SONIA fetch failed" in w for w in sidebar_warnings(at))
+    assert "(FRED (IUDSOIA), cached)" in header_caption(at)
+
+
+def test_sidebar_sonia_fallback():
+    at = AppTest.from_file(APP, default_timeout=90)
+    at.run()  # no live, no cache
+    assert not at.exception
+    text = sidebar_text(at)
+    assert "**4.0000%**" in text and "As of: n/a" in text
+    assert "Source: assumptions.py placeholder" in text and "Status: **fallback**" in text
+    assert any("placeholder in assumptions.py" in w for w in sidebar_warnings(at))
+    assert any(FALLBACK_SONIA_NOTE in w.value for w in at.warning)  # banner names SONIA too
+
+
+def test_sidebar_sonia_manual_override(monkeypatch):
+    monkeypatch.setattr(sonia_mod, "fetch_latest_sonia",
+                        lambda **kw: (0.037329, date.today(), sonia_mod.BOE_SOURCE))
+    at = AppTest.from_file(APP, default_timeout=90)
+    at.run()
+    at.toggle(key="sonia_override").set_value(True).run()
+    at.slider(key="sonia_override_pct").set_value(3.0).run()
+    assert not at.exception
+    assert "SONIA 3.0000% (manual override)" in header_caption(at)
+    assert at.slider(key="im_spread_bp").max == 300.0  # IM slider follows the SONIA in use
+    assert at.session_state["ctx"].fin.sonia == pytest.approx(0.03)

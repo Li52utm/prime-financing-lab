@@ -26,7 +26,10 @@ HOLDING_PERIOD_DAYS = 365
 
 # --- Market rates -----------------------------------------------------------
 
-# UNVERIFIED: placeholder level. Update from the Bank of England IADB (series IUDSOIA).
+# UNVERIFIED: offline placeholder only. The app loads live SONIA from the Bank of England IADB
+# (series IUDSOIA; fallback FRED IUDSOIA) via data/sonia.py, caches the last good value in
+# data/cache/sonia.json, and uses this value only when both fail. Engine functions take SONIA as
+# an input; this default is used by tests and when no live or cached value exists.
 SONIA = 0.0400
 
 # Own assumption: the client's own cost of funding the margin / IM / shortfall it

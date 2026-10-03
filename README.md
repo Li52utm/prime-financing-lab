@@ -99,6 +99,32 @@ It opens at http://localhost:8501. The sidebar holds the trade ticket, with an A
 
 Every page carries a banner saying the default spreads and k are placeholder assumptions, not market levels. Every chart carries the subtitle "Illustrative, not a regulatory calculation". Every headline number has a "How is this calculated" expander.
 
+## Live SONIA
+
+The app loads SONIA live. The engine never calls the network: SONIA is an input to every engine function.
+
+- **Sources:**
+  - **Bank of England IADB** (first choice), series IUDSOIA, via its CSV endpoint (`_iadb-fromshowcolumns.asp?...&SeriesCodes=IUDSOIA&CSVF=TN...`). The response is `DATE,IUDSOIA` followed by rows like `30 Sep 2026,3.7329` (percent).
+  - **FRED** (fallback), `fredgraph.csv?id=IUDSOIA`. The response is `observation_date,IUDSOIA` followed by rows like `2026-09-30,3.7329`; UK holidays appear with an empty value.
+  - Both formats were verified by fetching them on 2026-10-03. FRED did not respond from the development network, so expect the fallback to time out there.
+- **Rules:**
+  - A browser-like User-Agent and a 10-second timeout per source.
+  - The value used is the most recent observation that has a value. Weekends and holidays have none.
+  - Values outside 0% to 15% are rejected.
+- **Load order:**
+  1. live fetch, BoE then FRED;
+  2. the last good value cached in `data/cache/sonia.json` (git-ignored);
+  3. the `SONIA` placeholder in `assumptions.py`.
+
+  The status is shown as **live**, **cached** or **fallback**, with the as-of date and its age.
+- **In the app:**
+  - The value is fetched through `st.cache_data` with a 6-hour TTL.
+  - The sidebar shows the value, as-of date, source and status.
+  - A warning appears if the status is cached or fallback, or if the as-of date is more than 5 business days old. Weekdays are counted with no UK holiday calendar.
+  - The page header shows the SONIA in use. The placeholder banner mentions SONIA only in fallback mode.
+- **Manual override:** the sidebar toggle "Manual SONIA override" replaces the loaded value with a slider value (0% to 15%). The header then says "manual override", and the IM remuneration slider's range follows the SONIA in use.
+- **Tests run offline:** `tests/conftest.py` disables the fetch and uses a temporary cache for every test.
+
 ## Running the tests
 
 ```

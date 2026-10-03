@@ -13,6 +13,15 @@ st.markdown(
     "values, which have no source to verify. Regulatory treatment is illustrative and simplified."
 )
 
+q = ctx.sonia_quote
+st.info(
+    f"**SONIA source.** Loaded live from the Bank of England IADB, series IUDSOIA; fallback FRED "
+    f"series IUDSOIA; the last good value is cached in `data/cache/sonia.json`; if both fail and "
+    f"there is no cache, the `SONIA` placeholder below is used. Now: {q.rate * 100:.4f}% as of "
+    f"{q.as_of.strftime('%d %b %Y') if q.as_of else 'n/a'} ({q.source}, status {q.status})"
+    + ("; manual override in use." if ctx.sonia_overridden else "."),
+    icon=":material/sync:")
+
 df = read_assumptions()
 c1, c2 = st.columns([2, 3])
 status = c1.multiselect("Status", ["VERIFIED", "UNVERIFIED", "n/a"],

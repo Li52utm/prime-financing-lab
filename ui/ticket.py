@@ -6,6 +6,7 @@ from dataclasses import dataclass
 import streamlit as st
 
 import assumptions as A
+from data.sonia import STALE_BUSINESS_DAYS, SoniaQuote, load_sonia
 from engine.capital import CapitalInputs, NettingSetTrade, default_capital_inputs
 from engine.financing import GILT_SOURCES, FinancingInputs, default_inputs
 
@@ -35,6 +36,46 @@ class Context:
     netting_on: bool
     netting_case: str
     netting_notional: float
+    sonia_quote: SoniaQuote  # live / cached / fallback value as loaded
+    sonia_overridden: bool  # True if the manual override replaced it
+
+
+SONIA_TTL_SECONDS = 6 * 3600
+
+
+@st.cache_data(ttl=SONIA_TTL_SECONDS, show_spinner="Fetching SONIA...")
+def cached_sonia() -> SoniaQuote:
+    """Live SONIA via data.sonia (network), cached in-process for 6 hours."""
+    return load_sonia()
+
+
+def render_sonia(sb) -> tuple[SoniaQuote, float, bool]:
+    """SONIA block at the top of the sidebar. Returns (quote, SONIA used, overridden)."""
+    q = cached_sonia()
+    as_of = q.as_of.strftime("%d %b %Y") if q.as_of else "n/a"
+    age = f" ({q.business_days_old} business days old)" if q.as_of else ""
+    sb.subheader("SONIA")
+    sb.markdown(
+        f"**{q.rate * 100:.4f}%**  \n"
+        f"As of: {as_of}{age}  \n"
+        f"Source: {q.source}  \n"
+        f"Status: **{q.status}**")
+    if q.status == "cached":
+        sb.warning(f"Live SONIA fetch failed. Using the cached value as of {as_of}.",
+                   icon=":material/warning:")
+    elif q.status == "fallback":
+        sb.warning("Live SONIA and the cache are unavailable. Using the placeholder in "
+                   "assumptions.py, which is not a market level.", icon=":material/warning:")
+    elif q.stale:
+        sb.warning(f"SONIA as-of date is more than {STALE_BUSINESS_DAYS} business days old "
+                   f"({as_of}).", icon=":material/warning:")
+    overridden = sb.toggle("Manual SONIA override", value=False, key="sonia_override")
+    sonia = q.rate
+    if overridden:
+        sonia = sb.slider("Override SONIA (%)", 0.0, 15.0, round(q.rate * 100, 2), step=0.01,
+                          format="%.2f", key="sonia_override_pct") / 100
+        sb.caption("Override in use: the loaded SONIA is ignored.")
+    return q, sonia, overridden
 
 
 def netting_trade(case: str, notional: float) -> NettingSetTrade:
@@ -46,6 +87,8 @@ def netting_trade(case: str, notional: float) -> NettingSetTrade:
 def render_ticket() -> Context:
     sb = st.sidebar
     sb.header("Trade ticket")
+    quote, sonia, overridden = render_sonia(sb)
+    sb.divider()
     notional_m = sb.number_input("Notional (GBP m)", min_value=1.0, max_value=1000.0,
                                  value=A.DEFAULT_NOTIONAL / 1e6, step=1.0, key="notional_m")
     tenor = sb.radio("Tenor", list(A.TENOR_DAYS), index=list(A.TENOR_DAYS).index(A.DEFAULT_TENOR),
@@ -85,10 +128,14 @@ def render_ticket() -> Context:
     target_rorwa_pct = sb.number_input("Target return on RWA (%)", min_value=0.0,
                                        max_value=20.0, value=A.TARGET_RORWA * 100, step=0.25,
                                        key="target_rorwa_pct")
+    # Slider runs from SONIA flat to SONIA (IM earns nothing), using the SONIA in use.
+    im_max_bp = round(sonia * 1e4 / 5) * 5.0
+    if st.session_state.get("im_spread_bp", 0.0) > im_max_bp:
+        st.session_state["im_spread_bp"] = im_max_bp
     im_spread_bp = sb.slider("TRS IM remuneration: SONIA minus (bp)",
-                             A.IM_REMUNERATION_SPREAD_MIN * 1e4,
-                             A.IM_REMUNERATION_SPREAD_MAX * 1e4,
-                             A.IM_REMUNERATION_SPREAD * 1e4, step=5.0, key="im_spread_bp")
+                             A.IM_REMUNERATION_SPREAD_MIN * 1e4, im_max_bp,
+                             min(A.IM_REMUNERATION_SPREAD * 1e4, im_max_bp), step=5.0,
+                             key="im_spread_bp")
 
     with sb.expander("Advanced"):
         regime = st.selectbox("Haircut regime", list(A.HAIRCUT_REGIMES),
@@ -116,6 +163,7 @@ def render_ticket() -> Context:
     fin = default_inputs(
         asset_class, tenor,
         notional=notional_m * 1e6,
+        sonia=sonia,
         dividend=dividend_pct / 100,
         ex_div_day=int(ex_div_day),
         include_sdrt=sdrt,
@@ -139,7 +187,7 @@ def render_ticket() -> Context:
         netting_set=(netting_trade(netting_case, netting_notional),) if netting_on else (),
     )
     ctx = Context(fin, cap, asset_class, ASSET_LABELS[asset_class], tenor, netting_on,
-                  netting_case, netting_notional)
+                  netting_case, netting_notional, quote, overridden)
     st.session_state["ctx"] = ctx
     return ctx
 

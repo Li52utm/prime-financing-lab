@@ -44,13 +44,28 @@ def clearance_sentence(route: str, row, k: float) -> str:
 
 # --- Page furniture ---------------------------------------------------------------
 
+FALLBACK_SONIA_NOTE = (" SONIA is also a placeholder: the live value and the cache are "
+                       "unavailable.")
+
+
+def sonia_label(ctx) -> str:
+    """'SONIA 3.7329% as of 30 Sep 2026 (Bank of England IADB (IUDSOIA), live)'."""
+    q = ctx.sonia_quote
+    if ctx.sonia_overridden:
+        return f"SONIA {ctx.fin.sonia * 100:.4f}% (manual override)"
+    as_of = q.as_of.strftime("%d %b %Y") if q.as_of else "no date"
+    return f"SONIA {q.rate * 100:.4f}% as of {as_of} ({q.source}, {q.status})"
+
+
 def page_header(title: str, ctx) -> None:
     st.title(title)
-    st.warning(PLACEHOLDER_BANNER, icon=":material/info:")
+    fallback = ctx.sonia_quote.status == "fallback" and not ctx.sonia_overridden
+    st.warning(PLACEHOLDER_BANNER + (FALLBACK_SONIA_NOTE if fallback else ""),
+               icon=":material/info:")
     x = ctx.fin
     st.caption(
         f"GBP {x.notional / 1e6:,.1f}m {ctx.asset_label} · {ctx.tenor} ({x.tenor_days}d) · "
-        f"SONIA {x.sonia * 100:.2f}% (placeholder) · k {x.shadow_cost_k * 100:.2f}% · "
+        f"{sonia_label(ctx)} · k {x.shadow_cost_k * 100:.2f}% · "
         f"{A.HAIRCUT_REGIMES[ctx.cap.haircut_regime]['label']}"
     )
 

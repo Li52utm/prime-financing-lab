@@ -8,7 +8,7 @@ import assumptions as A
 from engine.financing import breakeven_trs_spread, pb_route, trs_route, upgrade_route
 from ui.common import (
     INK_2, MUTED, OTHER_COLORS, ROUTE_COLORS, ROUTES, bp, explain, gbp, over_sonia_bp,
-    page_header, pct, show, style, table,
+    page_header, pct, show, sonia_label, style, table,
 )
 from ui.ticket import get_ctx
 
@@ -37,7 +37,7 @@ Financing cost over {x.tenor_days} days = sum of the parts below except the divi
 {parts}
 
 bp over SONIA = cost / (N × τ) − SONIA, with N = {gbp(x.notional)}, τ = {x.tenor_days}/365,
-SONIA {pct(x.sonia)} (placeholder). Margin funding uses the client's own rate
+{sonia_label(ctx)}. Margin funding uses the client's own rate
 {pct(x.client_funding_rate)} (own assumption).
 """)
 
