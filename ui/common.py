@@ -12,21 +12,62 @@ PLACEHOLDER_BANNER = (
     "not market levels."
 )
 
-# Dark-mode categorical slots from the dataviz reference palette (first three validated
-# all-pairs in dark mode). Routes always take slots 1-3; non-route series use slots 5-8.
-ROUTE_COLORS = {"PB": "#3987e5", "TRS": "#d95926", "Collateral upgrade": "#199e70"}
-OTHER_COLORS = ["#d55181", "#008300", "#9085e9", "#e66767"]  # slots 5-8
-SURFACE = "#1a1a19"
-INK = "#ffffff"
-INK_2 = "#c3c2b7"
-MUTED = "#898781"
-GRID = "#2c2c2a"
-AXIS = "#383835"
+# Terminal desk palette (all on a near-black page). CVD-checked with Machado (2009) simulation
+# and OKLab Delta E x100: every route pair >= 14.6 under protan / deutan / tritan, >= 24.5
+# normal; contrast on the panel colour >= 6:1. Routes also differ by marker and dash.
+PAGE = "#0b0c0b"
+SURFACE = "#151715"  # panels and chart background
+PANEL_2 = "#1c1f1c"
+INK = "#e4e6e1"
+INK_2 = "#b9bdb5"
+MUTED = "#8b9088"
+GRID = "#232723"
+AXIS = "#343934"
+ACCENT = "#3ddc84"  # UI accent: headings, key metrics, active states (not used for series)
 ROUTES = ["PB", "TRS", "Collateral upgrade"]
-# Diverging scale (reference palette pair blue <-> red, neutral dark-grey midpoint). Lightness
-# rises away from zero on both arms, so magnitude does not rely on hue; a contour marks zero.
-DIVERGING = [[0.0, "#e66767"], [0.25, "#9e4544"], [0.5, "#383835"], [0.75, "#2a6bb8"],
-             [1.0, "#5598e7"]]
+ROUTE_COLORS = {"PB": "#25a85c", "TRS": "#ffc247", "Collateral upgrade": "#6dd3ff"}
+ROUTE_SYMBOLS = {"PB": "circle", "TRS": "square", "Collateral upgrade": "diamond"}
+ROUTE_DASHES = {"PB": "solid", "TRS": "dash", "Collateral upgrade": "dot"}
+ROUTE_PATTERNS = {"PB": "", "TRS": "/", "Collateral upgrade": "."}  # bar fills
+# Non-route series (components, stress lines): violet, light grey, coral, steel.
+# All pairs pass CVD checks (worst 8.4 tritan, violet/coral).
+OTHER_COLORS = ["#d77ee8", "#c9ccc6", "#ff8a5c", "#4f7fae"]
+OTHER_SYMBOLS = ["triangle-up", "x", "star", "hexagon"]
+OTHER_DASHES = ["solid", "dash", "dot", "dashdot"]
+# Diverging scale for RoLE - k: misses magenta-violet, clears green, neutral dark midpoint.
+# Lightness rises away from zero on both arms; a bold contour marks zero. CVD-checked: worst
+# pair (mid steps, deuteranopia) Delta E 14.8. Deliberately not red versus green.
+DIVERGING = [[0.0, "#d77ee8"], [0.25, "#8a45a6"], [0.5, "#2a2d2a"], [0.75, "#2c7a4b"],
+             [1.0, "#4fe08f"]]
+
+
+def route_line(route: str, width: int = 2) -> dict:
+    """Line and marker styling for a route series: colour + dash + marker shape."""
+    return {"line": {"color": ROUTE_COLORS[route], "width": width, "dash": ROUTE_DASHES[route]},
+            "marker": {"color": ROUTE_COLORS[route], "symbol": ROUTE_SYMBOLS[route], "size": 8}}
+
+
+def other_line(i: int, width: int = 2) -> dict:
+    return {"line": {"color": OTHER_COLORS[i], "width": width, "dash": OTHER_DASHES[i]},
+            "marker": {"color": OTHER_COLORS[i], "symbol": OTHER_SYMBOLS[i], "size": 8}}
+
+
+_ACRONYMS = {"sonia": "SONIA", "sdrt": "SDRT", "im": "IM", "pb": "PB", "trs": "TRS",
+             "rwa": "RWA", "sft": "SFT"}
+
+
+def label(key: str) -> str:
+    """'sonia_from_client' -> 'SONIA from client' (sentence case, acronyms kept)."""
+    words = key.split("_")
+    out = [_ACRONYMS.get(w, w) for w in words]
+    if out and out[0] == words[0]:
+        out[0] = out[0].capitalize()
+    return " ".join(out)
+
+
+def tag(clears: bool) -> str:
+    """Text tag for clears / misses (no emoji; meaning carried by the word)."""
+    return ":green[**[CLEARS]**]" if clears else ":violet[**[MISSES]**]"
 
 
 def clearance_sentence(route: str, row, k: float) -> str:
@@ -58,10 +99,9 @@ def sonia_label(ctx) -> str:
 
 
 def page_header(title: str, ctx) -> None:
-    st.title(title)
+    """Placeholder notice and trade context. The page name sits in the top banner (ui.theme)."""
     fallback = ctx.sonia_quote.status == "fallback" and not ctx.sonia_overridden
-    st.warning(PLACEHOLDER_BANNER + (FALLBACK_SONIA_NOTE if fallback else ""),
-               icon=":material/info:")
+    st.warning(PLACEHOLDER_BANNER + (FALLBACK_SONIA_NOTE if fallback else ""))
     x = ctx.fin
     st.caption(
         f"GBP {x.notional / 1e6:,.1f}m {ctx.asset_label} · {ctx.tenor} ({x.tenor_days}d) · "
@@ -130,29 +170,37 @@ def table(df: pd.DataFrame, formats: dict[str, str] | None = None, height: int |
 
 # --- Charts -------------------------------------------------------------------------
 
+MONO = ('ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "SFMono-Regular", Menlo, '
+        '"Liberation Mono", monospace')
+
+
 def style(fig: go.Figure, title: str, x_title: str | None = None,
           y_title: str | None = None, height: int = 380) -> go.Figure:
-    """One look for every chart, always with the 'Illustrative' subtitle."""
+    """One look for every chart: terminal palette, monospace, the 'Illustrative' subtitle,
+    legend below the plot so it never collides with the title block."""
     fig.update_layout(
         template="plotly_dark",
-        title={"text": title, "subtitle": {"text": SUBTITLE, "font": {"color": MUTED, "size": 12}},
-               "font": {"color": INK, "size": 16}, "x": 0, "xanchor": "left"},
+        title={"text": title.upper(), "subtitle": {"text": SUBTITLE,
+                                                  "font": {"color": MUTED, "size": 11}},
+               "font": {"color": ACCENT, "size": 13}, "x": 0, "xanchor": "left",
+               "y": 0.97, "yanchor": "top"},
         paper_bgcolor=SURFACE,
         plot_bgcolor=SURFACE,
-        font={"family": "system-ui, -apple-system, Segoe UI, sans-serif", "color": INK_2,
-              "size": 12},
+        font={"family": MONO, "color": INK_2, "size": 11},
         height=height,
-        margin={"l": 60, "r": 20, "t": 80, "b": 50},
-        legend={"orientation": "h", "yanchor": "bottom", "y": 1.0, "xanchor": "right", "x": 1,
-                "bgcolor": "rgba(0,0,0,0)"},
-        hoverlabel={"bgcolor": "#262624", "font": {"color": INK}},
+        margin={"l": 64, "r": 24, "t": 74, "b": 86},
+        legend={"orientation": "h", "yanchor": "top", "y": -0.2, "xanchor": "left", "x": 0,
+                "bgcolor": "rgba(0,0,0,0)", "font": {"color": INK_2}},
+        hoverlabel={"bgcolor": PANEL_2, "bordercolor": ACCENT,
+                    "font": {"color": INK, "family": MONO}},
         bargap=0.35,
-        barcornerradius=4,
+        barcornerradius=0,
     )
-    axis = {"gridcolor": GRID, "zerolinecolor": AXIS, "linecolor": AXIS,
+    axis = {"gridcolor": GRID, "zerolinecolor": AXIS, "linecolor": AXIS, "showline": True,
             "tickfont": {"color": MUTED}, "title": {"font": {"color": INK_2}}}
     fig.update_xaxes(**axis, title_text=x_title)
     fig.update_yaxes(**axis, title_text=y_title)
+    fig.update_annotations(font={"color": INK_2, "family": MONO, "size": 11})
     return fig
 
 

@@ -20,7 +20,7 @@ st.info(
     f"there is no cache, the `SONIA` placeholder below is used. Now: {q.rate * 100:.4f}% as of "
     f"{q.as_of.strftime('%d %b %Y') if q.as_of else 'n/a'} ({q.source}, status {q.status})"
     + ("; manual override in use." if ctx.sonia_overridden else "."),
-    icon=":material/sync:")
+    )
 
 df = read_assumptions()
 c1, c2 = st.columns([2, 3])

@@ -1,10 +1,46 @@
+# Terminal desk theme. System font stacks only (no external font downloads).
 [theme]
 base = "dark"
-primaryColor = "#3987e5"
-backgroundColor = "#0d0d0d"
-secondaryBackgroundColor = "#1a1a19"
-textColor = "#ffffff"
-font = "sans serif"
+primaryColor = "#3ddc84"
+backgroundColor = "#0b0c0b"
+secondaryBackgroundColor = "#151715"
+textColor = "#e4e6e1"
+linkColor = "#3ddc84"
+font = "ui-monospace, 'Cascadia Mono', 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, 'Liberation Mono', monospace"
+headingFont = "ui-monospace, 'Cascadia Mono', 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, 'Liberation Mono', monospace"
+codeFont = "ui-monospace, 'Cascadia Mono', 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, 'Liberation Mono', monospace"
+baseFontSize = 13
+baseRadius = "none"
+borderColor = "#2a2e2a"
+dataframeBorderColor = "#2a2e2a"
+showWidgetBorder = true
+showSidebarBorder = true
+chartCategoricalColors = ["#25a85c", "#ffc247", "#6dd3ff", "#d77ee8", "#c9ccc6", "#ff8a5c", "#4f7fae"]
+dataframeHeaderBackgroundColor = "#1c1f1c"
+metricValueFontSize = "1.45rem"
+# Semantic colours used by alerts, metric deltas and :colour[] text: palette only (no red/blue).
+greenColor = "#3ddc84"
+greenTextColor = "#3ddc84"
+greenBackgroundColor = "#102016"
+yellowColor = "#ffc247"
+yellowTextColor = "#ffc247"
+yellowBackgroundColor = "#1b1910"
+redColor = "#ff8a5c"
+redTextColor = "#ff8a5c"
+redBackgroundColor = "#21150f"
+blueColor = "#b9bdb5"
+blueTextColor = "#d9dcd5"
+blueBackgroundColor = "#161916"
+violetColor = "#d77ee8"
+violetTextColor = "#d77ee8"
+violetBackgroundColor = "#1d1420"
+
+[theme.sidebar]
+backgroundColor = "#101210"
+secondaryBackgroundColor = "#181b18"
+
+[client]
+toolbarMode = "minimal"  # hide the Deploy button and developer menu items
 
 [browser]
 gatherUsageStats = false

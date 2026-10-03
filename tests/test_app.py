@@ -9,16 +9,17 @@ from streamlit.testing.v1 import AppTest
 from engine.capital import NOT_MODELLED_BANNER
 from ui.assumptions_reader import read_assumptions
 from ui.common import PLACEHOLDER_BANNER, SUBTITLE
+from ui.theme import THEME_MARKER
 
 APP = Path(__file__).resolve().parent.parent / "app.py"
 
 PAGES = {
-    "Summary": "pages/summary_page.py",
-    "Client view": "pages/client_page.py",
-    "Desk view": "pages/desk_page.py",
-    "Capital": "pages/capital_page.py",
-    "Stress lab": "pages/stress_page.py",
-    "Assumptions": "pages/assumptions_page.py",
+    "Summary": "views/summary_page.py",
+    "Client view": "views/client_page.py",
+    "Desk view": "views/desk_page.py",
+    "Capital": "views/capital_page.py",
+    "Stress lab": "views/stress_page.py",
+    "Assumptions": "views/assumptions_page.py",
 }
 PAGES_WITH_HEADLINES = ["Summary", "Client view", "Desk view", "Capital", "Stress lab"]
 
@@ -46,8 +47,23 @@ def chart_specs(at: AppTest) -> list[str]:
 def test_page_runs_with_banner(page):
     at = open_page(page)
     assert not at.exception, [e.value for e in at.exception]
-    assert at.title[0].value == page
     assert any(PLACEHOLDER_BANNER in w.value for w in at.warning)
+
+
+@pytest.mark.parametrize("page", list(PAGES))
+def test_banner_and_theme_on_every_page(page):
+    """The entry script injects the theme CSS and the top banner on every page."""
+    at = open_page(page)
+    md = [m.value for m in at.markdown]
+    assert sum(THEME_MARKER in v for v in md) == 1  # CSS injected exactly once
+    banners = [v for v in md if 'data-testid="pfl-banner"' in v]
+    assert len(banners) == 1
+    b = banners[0]
+    assert "PRIME FINANCING LAB" in b and f"/ {page.upper()}" in b
+    assert "SONIA 4.0000%" in b and "FALLBACK" in b  # conftest: offline -> placeholder
+    assert not at.title  # page headers replaced by the banner
+    for text in md + [w.value for w in at.warning] + [i.value for i in at.info]:
+        assert "✅" not in text and "❌" not in text  # no emojis
 
 
 @pytest.mark.parametrize("page", list(PAGES))

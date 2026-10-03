@@ -8,8 +8,9 @@ import assumptions as A
 from engine.capital import best_for_desk, capital_comparison, k_sensitivity, role_grid
 from engine.financing import breakeven_trs_spread, pb_route, trs_route, upgrade_route
 from ui.common import (
-    AXIS, DIVERGING, INK, ROUTE_COLORS, ROUTES, SURFACE, bp, clearance_sentence, explain, gbp,
-    over_sonia_bp, page_header, pct, show, style, table,
+    DIVERGING, INK, MUTED, ROUTE_COLORS, ROUTE_DASHES, ROUTES, SURFACE, bp,
+    clearance_sentence, explain, gbp, over_sonia_bp, page_header, pct, route_line, show, style,
+    table, tag,
 )
 from ui.ticket import get_ctx
 
@@ -26,10 +27,10 @@ tau_txt = f"{x.tenor_days}/365"
 best = best_for_desk(cap.reset_index())
 if best is None:
     st.info(f"No route clears the balance-sheet charge k = {pct(k)} at quoted spreads. "
-            "No best-for-desk route is named.", icon=":material/block:")
+            "No best-for-desk route is named.")
 else:
     st.success(f"Clears k = {pct(k)}: {best} has the highest return on leverage exposure "
-               "among routes that clear.", icon=":material/check_circle:")
+               "among routes that clear.")
 
 # --- Lead: break-even k and required vs quoted spread, per route -------------------
 st.subheader("Break-even balance-sheet charge and required spread")
@@ -40,11 +41,11 @@ for col, route in zip(cols, ROUTES):
     with col.container(border=True):
         st.markdown(f"**{route}**")
         be = row["break_even_k"]
-        st.metric("Break-even k", bp(be), f"{(be - k) * 1e4:+.1f} bp vs k", delta_color="normal")
+        st.metric("Break-even k", bp(be), f"{(be - k) * 1e4:+.1f} bp vs k", delta_color="off")
         st.metric(f"Required {lever} for RoLE = k", bp(row["required_spread_role"]),
                   f"quoted {bp(row['current_spread'])}", delta_color="off")
         clears = bool(row["clears_role_hurdle"])
-        st.markdown(("✅ **Clears k**" if clears else "❌ **Misses k**")
+        st.markdown(tag(clears)
                     + f" · cushion {row['role_hurdle_cushion_bp']:+.1f} bp of {lever}")
         base = x.notional * (1 - x.pb_margin) if route == "PB" else x.notional
         explain(f"{route} break-even k and required {lever}", f"""
@@ -126,16 +127,16 @@ fig = go.Figure()
 for route in ROUTES:
     d = ks[ks["route"] == route]
     fig.add_scatter(x=d["k"] * 100, y=d["required_spread_role"] * 1e4, name=f"{route} required",
-                    mode="lines+markers", line={"color": ROUTE_COLORS[route], "width": 2},
-                    marker={"size": 8},
+                    mode="lines+markers", **route_line(route),
                     hovertemplate="k %{x:.2f}%<br>required %{y:.1f} bp<extra>" + route + "</extra>")
     fig.add_scatter(x=[ks["k"].min() * 100, ks["k"].max() * 100],
                     y=[cap.loc[route, "current_spread"] * 1e4] * 2, name=f"{route} quoted",
-                    mode="lines", line={"color": ROUTE_COLORS[route], "width": 2, "dash": "dot"},
+                    mode="lines", opacity=0.85,
+                    line={"color": ROUTE_COLORS[route], "width": 1, "dash": ROUTE_DASHES[route]},
                     hovertemplate="quoted %{y:.1f} bp<extra>" + route + "</extra>")
-fig.add_vline(x=k * 100, line={"color": "#898781", "width": 1, "dash": "dash"},
+fig.add_vline(x=k * 100, line={"color": MUTED, "width": 1, "dash": "dash"},
               annotation_text=f"k = {pct(k)}", annotation_position="top")
-show(style(fig, "Required spread for RoLE = k, against quoted (dotted)",
+show(style(fig, "Required spread for RoLE = k vs quoted (thin line)",
            x_title="Balance-sheet charge k (%)", y_title="Spread / fee (bp)"))
 explain("k sensitivity", """
 For each k from 0 to 3%, the required spread is the one at which gross RoLE equals k (formula
@@ -202,14 +203,14 @@ for i, route in enumerate(ROUTES, start=1):
                 "line": {"color": SURFACE, "width": 2}},
         hovertemplate=(f"current: {row['current_spread'] * 1e4:.1f} bp, k {k * 1e4:.0f} bp"
                        "<extra>" + route + "</extra>")), row=1, col=i)
-style(fig, "RoLE minus k by client spread and k (blue clears, red misses; white line = 0)",
+style(fig, "RoLE minus k by spread and k (green clears, violet misses, white line = 0)",
       height=430)
 fig.update_xaxes(range=[s_min, s_max], title_text="Client spread (bp)")
 fig.update_yaxes(range=[k_min, k_max])
 fig.update_yaxes(title_text="k (bp)", row=1, col=1)
 fig.update_layout(coloraxis={"colorscale": DIVERGING, "cmin": -zmax, "cmax": zmax, "cmid": 0,
                              "colorbar": {"title": {"text": "RoLE − k (bp)"}, "thickness": 12,
-                                          "outlinecolor": AXIS}},
+                                          "outlinewidth": 0}},
                   plot_bgcolor=SURFACE, margin={"t": 115})
 show(fig)
 st.caption(" ".join(clearance_sentence(r, cap.loc[r], k) for r in ROUTES))
@@ -221,7 +222,7 @@ Leverage exposure LE depends on neither s nor k, so
 
 RoLE(s) = (a + b·s·τ) / (LE·τ), cell = RoLE(s) − k, τ = {x.tenor_days}/365.
 
-Blue cells clear (RoLE ≥ k), red cells miss. The white line is RoLE = k, i.e. the required
+Green cells clear (RoLE ≥ k), violet cells miss. The white line is RoLE = k, i.e. the required
 spread at each k: s*(k) = (k·LE·τ − a) / (b·τ), a straight line along which the required
 spread rises LE / b bp per bp of k. The route using the most leverage per GBP of spread base
 needs the most extra spread as k rises (shallowest line). All three

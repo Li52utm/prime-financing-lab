@@ -7,8 +7,8 @@ import streamlit as st
 import assumptions as A
 from engine.financing import breakeven_trs_spread, pb_route, trs_route, upgrade_route
 from ui.common import (
-    INK_2, MUTED, OTHER_COLORS, ROUTE_COLORS, ROUTES, bp, explain, gbp, over_sonia_bp,
-    page_header, pct, show, sonia_label, style, table,
+    INK, MUTED, OTHER_COLORS, ROUTE_COLORS, ROUTES, bp, explain, gbp, over_sonia_bp,
+    label, page_header, pct, route_line, show, sonia_label, style, table,
 )
 from ui.ticket import get_ctx
 
@@ -28,7 +28,7 @@ for col, route in zip(cols, ROUTES):
                   delta_color="off")
         st.metric("Net of dividends, bp over SONIA", f"{over_sonia_bp(f.net_cost, x):,.1f} bp",
                   delta_color="off")
-        parts = "\n".join(f"- {k.replace('_', ' ')}: {gbp(v)}" for k, v in f.client_parts.items()
+        parts = "\n".join(f"- {label(k)}: {gbp(v)}" for k, v in f.client_parts.items()
                           if v)
         explain(f"{route} client cost", f"""
 Financing cost over {x.tenor_days} days = sum of the parts below except the dividend credit
@@ -72,7 +72,7 @@ f = fins[route]
 labels, values = [], []
 for k, v in f.client_parts.items():
     if v:
-        labels.append(k.replace("_", " ").capitalize())
+        labels.append(label(k))
         values.append(v)
 fig = go.Figure(go.Waterfall(
     x=[*labels, "Net cost"], y=[*values, 0], measure=["relative"] * len(values) + ["total"],
@@ -94,16 +94,16 @@ grid = [hi * i / 30 for i in range(31)]
 trs_net = [over_sonia_bp(trs_route(replace(x, trs_spread=s)).net_cost, x) for s in grid]
 fig = go.Figure()
 fig.add_scatter(x=[s * 1e4 for s in grid], y=trs_net, name="TRS net", mode="lines",
-                line={"color": ROUTE_COLORS["TRS"], "width": 2},
+                line=route_line("TRS")["line"],
                 hovertemplate="TRS spread %{x:.0f} bp<br>net %{y:.1f} bp over SONIA<extra></extra>")
 for rt in ("PB", "Collateral upgrade"):
     fig.add_scatter(x=[0, hi * 1e4], y=[over_sonia_bp(fins[rt].net_cost, x)] * 2,
                     name=f"{rt} net", mode="lines",
-                    line={"color": ROUTE_COLORS[rt], "width": 2, "dash": "dot"},
+                    line=route_line(rt)["line"],
                     hovertemplate="%{y:.1f} bp over SONIA<extra>" + rt + "</extra>")
 fig.add_scatter(x=[be * 1e4], y=[over_sonia_bp(fins["PB"].net_cost, x)], mode="markers+text",
-                name="Breakeven vs PB", marker={"size": 10, "color": INK_2},
-                text=[f"  {be * 1e4:.0f} bp"], textposition="middle right",
+                name="Breakeven vs PB", marker={"size": 11, "color": INK, "symbol": "x"},
+                text=[f"{be * 1e4:.0f} bp"], textposition="top center",
                 hovertemplate="breakeven %{x:.1f} bp<extra></extra>")
 fig.add_vline(x=x.trs_spread * 1e4, line={"color": MUTED, "dash": "dash", "width": 1},
               annotation_text="quoted", annotation_position="top")

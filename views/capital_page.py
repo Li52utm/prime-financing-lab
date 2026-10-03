@@ -11,14 +11,14 @@ from engine.capital import (
 )
 from engine.financing import GILT_SOURCES, upgrade_route
 from ui.common import (
-    MUTED, OTHER_COLORS, ROUTE_COLORS, ROUTES, bp, explain, gbp, gbp_m, page_header, pct, show,
-    style, table,
+    MUTED, OTHER_COLORS, ROUTES, SURFACE, explain, gbp, gbp_m, page_header, pct,
+    label, route_line, show, style, table,
 )
 from ui.ticket import GILT_SOURCE_LABELS, get_ctx
 
 ctx = get_ctx()
 x, c = ctx.fin, ctx.cap
-st.error(NOT_MODELLED_BANNER, icon=":material/report:")
+st.error(NOT_MODELLED_BANNER)
 page_header("Capital", ctx)
 tau = x.tenor_days / A.DAYS_IN_YEAR
 caps = {r.route: r for r in (pb_capital(x, c), trs_capital(x, c), upgrade_capital(x, c))}
@@ -31,9 +31,9 @@ for col, route in zip(cols, ROUTES):
         st.markdown(f"**{route}**")
         st.metric("Leverage exposure", gbp_m(r.leverage_exposure), delta_color="off")
         st.metric("RWA", gbp_m(r.rwa), delta_color="off")
-        lev = "\n".join(f"- {k.replace('_', ' ')}: {gbp(v)}" for k, v in r.leverage_parts.items()
+        lev = "\n".join(f"- {label(k)}: {gbp(v)}" for k, v in r.leverage_parts.items()
                         if v)
-        rwa = "\n".join(f"- {k.replace('_', ' ')}: EAD {gbp(r.ead_parts[k])} → RWA {gbp(v)}"
+        rwa = "\n".join(f"- {label(k)}: EAD {gbp(r.ead_parts[k])} → RWA {gbp(v)}"
                         for k, v in r.rwa_parts.items())
         explain(f"{route} leverage and RWA", f"""
 **Leverage exposure** (PRA Leverage Ratio (CRR) Art 429b, 429c, 429e; illustrative):
@@ -66,7 +66,7 @@ def stacked(parts_by_route: dict, groups: dict, default: str, title: str, y_titl
     fig = go.Figure()
     for j, g in enumerate(g for g in order if any(data[g])):
         fig.add_bar(x=ROUTES, y=data[g], name=g, marker_color=OTHER_COLORS[j % 4],
-                    marker_line={"color": "#1a1a19", "width": 2},
+                    marker_line={"color": SURFACE, "width": 2},
                     hovertemplate="%{x}<br>" + g + ": £%{y:.2f}m<extra></extra>")
     fig.update_layout(barmode="stack")
     show(style(fig, title, y_title=y_title, height=360))
@@ -128,12 +128,12 @@ h10 = equity_haircut_10d(c.haircut_regime, c.haircut_class)
 h_pb = scaled_haircut(h10, c.pb_liquidation_days)
 fig = go.Figure()
 fig.add_scatter(x=pbm["pb_margin"] * 100, y=pbm["rwa"] / 1e6, mode="lines", name="RWA",
-                line={"color": ROUTE_COLORS["PB"], "width": 2},
+                line=route_line("PB")["line"],
                 hovertemplate="margin %{x:.0f}%<br>RWA £%{y:.2f}m<extra></extra>")
 fig.add_vline(x=h_pb * 100, line={"color": MUTED, "dash": "dash", "width": 1},
-              annotation_text=f"supervisory haircut {pct(h_pb, 1)}", annotation_position="top")
+              annotation_text=f"supervisory haircut {pct(h_pb, 1)}", annotation_position="top right")
 fig.add_vline(x=x.pb_margin * 100, line={"color": MUTED, "dash": "dot", "width": 1},
-              annotation_text=f"margin {pct(x.pb_margin, 0)}", annotation_position="bottom right")
+              annotation_text=f"margin {pct(x.pb_margin, 0)}", annotation_position="top left")
 show(style(fig, "PB RWA by client margin", x_title="Client margin (% of notional)",
            y_title="RWA (GBP m)"))
 explain("PB RWA vs margin", f"""

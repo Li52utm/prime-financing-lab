@@ -58,7 +58,8 @@ def read_assumptions(path: pathlib.Path = PATH) -> pd.DataFrame:
         comment = " ".join(_comment_block(lines, node.lineno)
                            + [_inline_comment(lines[node.lineno - 1])]).strip()
         value = ast.get_source_segment(source, node.value) or ""
-        value = re.sub(r"\s+", " ", value)
+        value = "\n".join(line.split("#", 1)[0] for line in value.splitlines())  # drop comments
+        value = re.sub(r"\s+", " ", value).replace("{ ", "{").replace(", }", "}")
         hypothetical = marker is not None and node.lineno > marker and name != "MONTH_DAYS"
         kind, status = _type_and_status(comment, hypothetical and "own assumption" not in
                                         comment.lower())

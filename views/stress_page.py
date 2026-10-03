@@ -7,14 +7,16 @@ from engine.stress import (
     VIEW_LABELS, all_presets, get_preset, price_shock_table, repricing_path, stress_comparison,
     term_vs_rolling_by_preset,
 )
-from ui.common import MUTED, OTHER_COLORS, ROUTES, bp, explain, gbp, page_header, pct, show, style, table
+from ui.common import (
+    explain, gbp, other_line, page_header, show, style, table,
+)
 from ui.ticket import get_ctx
 
 ctx = get_ctx()
 x, c = ctx.fin, ctx.cap
 page_header("Stress lab", ctx)
 st.info("Every preset and shock here is **hypothetical**: an own assumption chosen to show the "
-        "mechanics, not a forecast.", icon=":material/science:")
+        "mechanics, not a forecast.")
 
 # --- Presets ------------------------------------------------------------------------------
 st.subheader("Stress presets (hypothetical)")
@@ -24,7 +26,7 @@ name = c1.selectbox("Preset", names, format_func=lambda n: get_preset(n).label, 
 view = c2.radio("Horizon", list(VIEW_LABELS), format_func=VIEW_LABELS.get, key="view")
 pb_rep = c3.slider("PB repriced (% of client shock)", 0, 100, 0, step=25, key="pb_rep") / 100
 p = get_preset(name)
-st.markdown(f"**{p.label}: {VIEW_LABELS[view]}.** Client spread +{p.client_spread_shock * 1e4:.0f} "
+st.caption(f"**{p.label}: {VIEW_LABELS[view]}.** Client spread +{p.client_spread_shock * 1e4:.0f} "
             f"bp, street spread +{p.street_spread_shock * 1e4:.0f} bp, k +{p.k_shock * 100:.2f}%, "
             f"street haircut +{p.street_haircut_change * 100:.0f}%, gilt borrow "
             f"+{p.gilt_borrow_shock * 1e4:.0f} bp, turn {p.turn_days} days.")
@@ -56,7 +58,7 @@ ps = price_shock_table(x, c)
 fig = go.Figure()
 for j, (col, label) in enumerate([("ead", "EAD"), ("rwa", "RWA")]):
     fig.add_scatter(x=ps["price_move"] * 100, y=ps[col] / 1e6, name=label, mode="lines+markers",
-                    line={"color": OTHER_COLORS[j * 2], "width": 2}, marker={"size": 8},
+                    **other_line(j),
                     hovertemplate="move %{x:.0f}%<br>" + label + " £%{y:.2f}m<extra></extra>")
 show(style(fig, "TRS EAD and RWA by stock move (hypothetical grid)", x_title="Stock move (%)",
            y_title="GBP m"))
@@ -83,7 +85,7 @@ fig = go.Figure()
 for j, (col, label) in enumerate([("cum_cost_gap", "Cumulative client cost gap (PB − TRS)"),
                                   ("cum_dealer_pb_shortfall", "Cumulative dealer PB shortfall")]):
     fig.add_scatter(x=path["month"], y=path[col], name=label, mode="lines+markers",
-                    line={"color": OTHER_COLORS[j * 2], "width": 2}, marker={"size": 8},
+                    **other_line(j),
                     hovertemplate="month %{x}<br>£%{y:,.0f}<extra>" + label + "</extra>")
 show(style(fig, f"{p.label}: shock persists for the whole path", x_title="Month after shock",
            y_title="GBP"))
