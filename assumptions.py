@@ -328,3 +328,22 @@ HEATMAP_SPREAD_MAX_BP = 150.0  # x axis upper end
 HEATMAP_K_MIN_BP = 0.0  # y axis: balance-sheet charge k
 HEATMAP_K_MAX_BP = 100.0  # y axis upper end
 HEATMAP_STEP_BP = 5.0  # cell size on both axes
+
+
+# =============================================================================
+# Markets page (display analytics only; nothing here feeds the financing engine)
+# =============================================================================
+
+MARKETS_BB_WINDOW = 20  # Bollinger window (days); standard default, adjustable in the app
+MARKETS_BB_WIDTH = 2.0  # Bollinger width in standard deviations; standard default
+MARKETS_MA_FAST = 50  # moving averages (days), conventional desk choices
+MARKETS_MA_SLOW = 200  # slow moving average (days), conventional desk choice
+MARKETS_RSI_WINDOW = 14  # Wilder's original RSI window
+MARKETS_VOL_WINDOW = 20  # rolling realised volatility window (days)
+MARKETS_TRADING_DAYS = 252  # annualisation factor for daily volatility (own convention)
+MARKETS_FORWARD_DAYS = (5, 20)  # horizons for "what happened after a band breach"
+MARKETS_CANDLE_MAX_BARS = 1500  # above this many daily bars, candles are drawn weekly
+MARKETS_CACHE_TTL_HOURS = 6  # in-app cache lifetime for fetched series
+MARKETS_RANGES_MONTHS = {"1M": 1, "6M": 6, "1Y": 12, "5Y": 60, "10Y": 120, "Max": None}  # presets
+MARKETS_DEFAULT_RANGE = "1Y"  # own assumption: range shown on first load
+MARKETS_RSI_LEVELS = (30, 70)  # conventional oversold / overbought guides on the RSI panel

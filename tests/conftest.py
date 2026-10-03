@@ -2,17 +2,23 @@
 
 Each test gets a SONIA fetch that fails and an empty temporary cache, so the app falls back
 to the assumptions.py placeholder (4.00%) unless a test opts into live or cached mode.
-The Streamlit data cache (6-hour SONIA TTL) is cleared so one test cannot leak into another.
+Market data fetches fail too and use an empty temporary cache (the Markets page shows its
+error state unless a test opts in). The Streamlit data cache is cleared so one test cannot
+leak into another.
 """
 
 import pytest
 import streamlit as st
 
-from data import sonia
+from data import markets, sonia
 
 
 def _no_network(*args, **kwargs):
     raise sonia.SoniaFetchError("network disabled in tests")
+
+
+def _no_market_network(key, *args, **kwargs):
+    raise ConnectionError("network disabled in tests")
 
 
 @pytest.fixture(autouse=True)
@@ -23,3 +29,12 @@ def offline_sonia(monkeypatch, tmp_path):
     st.cache_data.clear()
     yield
     st.cache_data.clear()
+
+
+@pytest.fixture(autouse=True)
+def offline_markets(monkeypatch, tmp_path):
+    monkeypatch.setattr(markets, "fetch_live", _no_market_network)
+    monkeypatch.setattr(markets, "_get", _no_market_network)
+    monkeypatch.setattr(markets, "_yahoo_history", _no_market_network)
+    monkeypatch.setattr(markets, "CACHE_DIR", tmp_path / "cache" / "markets")
+    yield

@@ -20,6 +20,7 @@ PAGES = {
     "Capital": "views/capital_page.py",
     "Stress lab": "views/stress_page.py",
     "Assumptions": "views/assumptions_page.py",
+    "Markets": "views/markets_page.py",
 }
 PAGES_WITH_HEADLINES = ["Summary", "Client view", "Desk view", "Capital", "Stress lab"]
 
@@ -43,7 +44,7 @@ def chart_specs(at: AppTest) -> list[str]:
     return [el.proto.spec for el in at.get("plotly_chart")]
 
 
-@pytest.mark.parametrize("page", list(PAGES))
+@pytest.mark.parametrize("page", [p for p in PAGES if p != "Markets"])  # no trade context
 def test_page_runs_with_banner(page):
     at = open_page(page)
     assert not at.exception, [e.value for e in at.exception]
@@ -318,3 +319,86 @@ def test_sidebar_sonia_manual_override(monkeypatch):
     assert "SONIA 3.0000% (manual override)" in header_caption(at)
     assert at.slider(key="im_spread_bp").max == 300.0  # IM slider follows the SONIA in use
     assert at.session_state["ctx"].fin.sonia == pytest.approx(0.03)
+
+
+# --- Markets page: live, cached and error modes (network mocked) ---------------------------
+
+import numpy as np  # noqa: E402
+import pandas as pd  # noqa: E402
+
+from data import markets as markets_mod  # noqa: E402
+
+
+def synthetic(key: str, n: int = 600) -> pd.DataFrame:
+    """Deterministic daily series in the shape fetch_live returns."""
+    idx = pd.bdate_range(end="2026-10-02", periods=n)
+    rng = np.random.default_rng(11)
+    if markets_mod.SERIES[key].is_yield:
+        return pd.DataFrame({"close": 3.5 + np.cumsum(rng.normal(0, 0.03, n))}, index=idx)
+    close = 100 * np.exp(np.cumsum(rng.normal(0, 0.01, n)))
+    df = pd.DataFrame({"close": close}, index=idx)
+    if markets_mod.SERIES[key].has_ohlc:
+        df = df.assign(open=close * 0.999, high=close * 1.01, low=close * 0.99,
+                       volume=1e6)[["open", "high", "low", "close", "volume"]]
+    return df
+
+
+def markets_text(at: AppTest) -> str:
+    return " ".join([c.value for c in at.caption] + [m.value for m in at.markdown]
+                    + [w.value for w in at.warning] + [e.value for e in at.error])
+
+
+def test_markets_live_mode(monkeypatch):
+    monkeypatch.setattr(markets_mod, "fetch_live", synthetic)
+    at = open_page("Markets")
+    assert not at.exception, [e.value for e in at.exception]
+    labels = [m.label for m in at.metric]
+    assert labels == ["Last (index points)", "Daily change", "1Y return", "1Y volatility",
+                      "Max drawdown (1Y)", "Position in bands (%b)"]
+    stamps = [c.value for c in at.caption if c.value.startswith("Source:")]
+    assert len(stamps) == 3 and all("status live" in s and "as of 02 Oct 2026" in s for s in stamps)
+    spec = json.loads(chart_specs(at)[0])
+    types = [tr["type"] for tr in spec["data"]]
+    assert "candlestick" in types and "bar" in types  # OHLC series with volume
+    names = [tr.get("name") for tr in spec["data"]]
+    for n in ("MA 50", "MA 200", "Close above upper band", "Close below lower band"):
+        assert n in names
+    assert spec["layout"]["title"]["subtitle"]["text"] == SUBTITLE
+    assert "Bands describe range, not direction." in markets_text(at)
+    assert not at.error
+    # the only warning is the sidebar's offline SONIA notice, not a Markets cache warning
+    assert not any("Live fetch failed" in w.value for w in at.warning)
+
+
+def test_markets_live_yield_series_and_controls(monkeypatch):
+    monkeypatch.setattr(markets_mod, "fetch_live", synthetic)
+    at = open_page("Markets")
+    at.selectbox(key="mkt_asset").set_value("uk10y")
+    at.radio(key="mkt_range").set_value("Max")
+    at.number_input(key="mkt_bb_window").set_value(30)
+    at.number_input(key="mkt_bb_width").set_value(2.5)
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert [m.label for m in at.metric][2] == "1Y change"  # yields: change in bp, not a return
+    spec = json.loads(chart_specs(at)[0])
+    types = [tr["type"] for tr in spec["data"]]
+    assert "candlestick" not in types and "bar" not in types  # line, no volume
+    assert any(tr.get("name") == "Bollinger 30, ±2.5σ" for tr in spec["data"])
+
+
+def test_markets_cached_mode():
+    markets_mod.write_cache("ftse100", synthetic("ftse100"), "2026-10-01T08:30:00")
+    at = open_page("Markets")  # conftest: live fetch fails
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("Live fetch failed. Showing the cached copy fetched 2026-10-01 08:30" in w.value
+               for w in at.warning)
+    stamps = [c.value for c in at.caption if c.value.startswith("Source:")]
+    assert stamps and all("status cached" in s for s in stamps)
+
+
+def test_markets_error_mode():
+    at = open_page("Markets")  # no live, no cache
+    assert not at.exception, [e.value for e in at.exception]
+    assert len(at.error) == 1
+    assert "No data for FTSE 100" in at.error[0].value and "no cached copy" in at.error[0].value
+    assert not at.metric and not chart_specs(at)

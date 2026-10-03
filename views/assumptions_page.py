@@ -1,4 +1,7 @@
+import pandas as pd
 import streamlit as st
+
+from data import markets as M
 
 from ui.assumptions_reader import PATH, read_assumptions
 from ui.common import page_header
@@ -21,6 +24,15 @@ st.info(
     f"{q.as_of.strftime('%d %b %Y') if q.as_of else 'n/a'} ({q.source}, status {q.status})"
     + ("; manual override in use." if ctx.sonia_overridden else "."),
     )
+
+st.markdown("**Market data sources (Markets page).** Each was fetched and checked before use on "
+            "2026-10-03. FRED (no response from the development network) and Stooq (bot "
+            "challenge instead of data) are not used.")
+st.dataframe(pd.DataFrame([{
+    "Series": s.name, "Source": s.source, "Code": s.code,
+    "Earliest (verified)": s.earliest_verified, "Terms of use": M.TERMS[s.provider],
+} for s in M.SERIES.values()]), hide_index=True, width="stretch", column_config={
+    "Terms of use": st.column_config.TextColumn(width="large")})
 
 df = read_assumptions()
 c1, c2 = st.columns([2, 3])

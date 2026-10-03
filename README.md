@@ -125,6 +125,31 @@ The app loads SONIA live. The engine never calls the network: SONIA is an input 
 - **Manual override:** the sidebar toggle "Manual SONIA override" replaces the loaded value with a slider value (0% to 15%). The header then says "manual override", and the IM remuneration slider's range follows the SONIA in use.
 - **Tests run offline:** `tests/conftest.py` disables the fetch and uses a temporary cache for every test.
 
+## Markets page
+
+The Markets page shows public market data for context. It is display analytics only: nothing on it feeds the financing engine.
+
+- **Sources:** each was fetched and checked before use on 2026-10-03. The table lists the verified earliest dates.
+
+  | Series | Source | Earliest | Terms |
+  |---|---|---|---|
+  | FTSE 100 | Yahoo Finance via yfinance (`^FTSE`), OHLCV | 1984-01-03 | Yahoo: personal use only |
+  | S&P 500 | Yahoo Finance via yfinance (`^GSPC`), OHLCV | 1927-12-30 | Yahoo: personal use only |
+  | Brent crude | EIA Europe Brent spot FOB (RBRTE) | 1987-05-20 | Public domain; cite EIA |
+  | UK 10y gilt yield | Bank of England IUDMNPY | 1993-11-01 | UK Open Government Licence |
+  | German 10y Bund yield | Bundesbank BBSIS (10y, Svensson) | 1997-08-07 | Free; reproduction must state the source |
+  | GBP/USD | Bank of England XUDLUSS | 1975-01-02 | UK Open Government Licence |
+
+  Not used: FRED (no response from the development network) and Stooq (it returns a bot challenge instead of data).
+- **Load order:** live, then the cache in `data/cache/markets/` (git-ignored), then an error shown on the page. Every series is stamped with its source, as-of date and status (live or cached). The app keeps fetched series for 6 hours.
+- **Charts:**
+  - Candlesticks (OHLC series) or a line, with volume where available.
+  - Bollinger bands: window 20 and width 2, both adjustable; population standard deviation.
+  - 50- and 200-day moving averages, RSI(14) with Wilder smoothing, and 20-day realised volatility.
+  - A drawdown panel. For yields, changes, volatility and drawdown are in basis points.
+  - Ranges above 1,500 daily bars plot weekly bars and week-end indicator values. The indicator maths always runs on daily data.
+- **Bollinger breaches** are marked on the chart (▼ above the upper band, ▲ below the lower). A table shows how often closes fall outside the bands and the average move over the next 5 and 20 days, next to the all-days average. Bands describe range, not direction.
+
 ## Running the tests
 
 ```

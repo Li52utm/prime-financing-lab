@@ -41,6 +41,15 @@ DIVERGING = [[0.0, "#d77ee8"], [0.25, "#8a45a6"], [0.5, "#2a2d2a"], [0.75, "#2c7
              [1.0, "#4fe08f"]]
 
 
+# Markets page roles (same palette; up/down candles are green/violet, not red/green).
+MKT = {
+    "up": ACCENT, "down": OTHER_COLORS[0], "band": "#6dd3ff", "band_fill": "rgba(109,211,255,0.07)",
+    "ma_fast": "#ffc247", "ma_slow": OTHER_COLORS[1], "above": OTHER_COLORS[2], "below": "#4fe08f",
+    "vol": "#ffc247", "dd": OTHER_COLORS[0], "dd_fill": "rgba(215,126,232,0.18)",
+    "marker_edge": PAGE,
+}
+
+
 def route_line(route: str, width: int = 2) -> dict:
     """Line and marker styling for a route series: colour + dash + marker shape."""
     return {"line": {"color": ROUTE_COLORS[route], "width": width, "dash": ROUTE_DASHES[route]},
@@ -147,13 +156,14 @@ _FORMATS = {
     "pct": "%.2f%%",
     "m": "%.2f",
     "num": "%.4f",
+    "num2": "%.2f",
     "int": "%d",
 }
 
 
 def table(df: pd.DataFrame, formats: dict[str, str] | None = None, height: int | None = None):
     """Dense table. Numbers stay numeric so Streamlit right-aligns them.
-    formats: column -> one of gbp, bp, pct, m, num, int (values already in those units)."""
+    formats: column -> one of gbp, bp, pct, m, num, num2, int (values already in those units)."""
     df = df.copy()
     config = {}
     for col, kind in (formats or {}).items():
