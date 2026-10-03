@@ -8,7 +8,6 @@ A Streamlit dashboard that compares three ways to finance a long equity position
 
 For each route it shows the **client's all-in cost** and the **dealer's return on balance sheet**. The audience is a repo / equity-finance desk.
 
-## Data and confidentiality
 Public data and own assumptions only.
 
 ## Regulatory treatment
