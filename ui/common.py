@@ -23,6 +23,23 @@ MUTED = "#898781"
 GRID = "#2c2c2a"
 AXIS = "#383835"
 ROUTES = ["PB", "TRS", "Collateral upgrade"]
+# Diverging scale (reference palette pair blue <-> red, neutral dark-grey midpoint). Lightness
+# rises away from zero on both arms, so magnitude does not rely on hue; a contour marks zero.
+DIVERGING = [[0.0, "#e66767"], [0.25, "#9e4544"], [0.5, "#383835"], [0.75, "#2a6bb8"],
+             [1.0, "#5598e7"]]
+
+
+def clearance_sentence(route: str, row, k: float) -> str:
+    """One line from capital_comparison data: spread needed at the current k, and the k
+    up to which the route clears at its quoted spread."""
+    lever = "fee" if route == "Collateral upgrade" else "spread"
+    if row["role"] is None or row["role"] != row["role"]:
+        return f"{route}: RoLE undefined (no leverage exposure)."
+    be = row["break_even_k"]
+    clears_at = (f"at its quoted {lever} it clears for k up to {be * 1e4:.0f} bp" if be > 0
+                 else f"at its quoted {lever} it clears at no k ≥ 0")
+    return (f"{route} needs {row['required_spread_role'] * 1e4:.0f} bp to clear k = "
+            f"{k * 1e4:.0f} bp (quoted {row['current_spread'] * 1e4:.0f} bp); {clears_at}.")
 
 
 # --- Page furniture ---------------------------------------------------------------

@@ -1,12 +1,15 @@
+import numpy as np
 import pandas as pd
 import plotly.graph_objects as go
 import streamlit as st
+from plotly.subplots import make_subplots
 
 import assumptions as A
-from engine.capital import best_for_desk, capital_comparison, k_sensitivity
+from engine.capital import best_for_desk, capital_comparison, k_sensitivity, role_grid
 from engine.financing import breakeven_trs_spread, pb_route, trs_route, upgrade_route
 from ui.common import (
-    ROUTE_COLORS, ROUTES, bp, explain, gbp, over_sonia_bp, page_header, pct, show, style, table,
+    AXIS, DIVERGING, INK, ROUTE_COLORS, ROUTES, SURFACE, bp, clearance_sentence, explain, gbp,
+    over_sonia_bp, page_header, pct, show, style, table,
 )
 from ui.ticket import get_ctx
 
@@ -143,3 +146,85 @@ wide = ks.pivot(index="k", columns="route", values="required_spread_role").mul(1
 wide.insert(0, "k (%)", wide.index * 100)
 table(wide[["k (%)", *ROUTES]].rename(columns={r: f"{r} req. (bp)" for r in ROUTES}),
       {"k (%)": "pct", **{f"{r} req. (bp)": "bp" for r in ROUTES}})
+
+# --- Spread vs k heatmaps -------------------------------------------------------------
+st.subheader("Spread vs k: where each route clears")
+with st.expander("Axis ranges"):
+    a1, a2, a3, a4 = st.columns(4)
+    s_min = a1.number_input("Spread from (bp)", 0.0, 1000.0, A.HEATMAP_SPREAD_MIN_BP, 5.0,
+                            key="hm_s_min")
+    s_max = a2.number_input("Spread to (bp)", 5.0, 1000.0, A.HEATMAP_SPREAD_MAX_BP, 5.0,
+                            key="hm_s_max")
+    k_min = a3.number_input("k from (bp)", 0.0, 1000.0, A.HEATMAP_K_MIN_BP, 5.0, key="hm_k_min")
+    k_max = a4.number_input("k to (bp)", 5.0, 1000.0, A.HEATMAP_K_MAX_BP, 5.0, key="hm_k_max")
+if s_max <= s_min or k_max <= k_min:
+    st.warning("Each axis needs 'to' above 'from'; showing the defaults.")
+    s_min, s_max = A.HEATMAP_SPREAD_MIN_BP, A.HEATMAP_SPREAD_MAX_BP
+    k_min, k_max = A.HEATMAP_K_MIN_BP, A.HEATMAP_K_MAX_BP
+
+
+def axis(lo: float, hi: float) -> np.ndarray:
+    """At most ~60 cells per axis; at least the default step."""
+    step = max(A.HEATMAP_STEP_BP, (hi - lo) / 60)
+    return np.arange(lo, hi + step / 2, step)
+
+
+spreads_bp, ks_bp = axis(s_min, s_max), axis(k_min, k_max)
+grids = {}
+for route in ROUTES:
+    g = role_grid(x, c, route, list(spreads_bp / 1e4), list(ks_bp / 1e4))
+    grids[route] = g.pivot(index="k", columns="spread", values="role_minus_k").to_numpy() * 1e4
+finite = np.concatenate([v[np.isfinite(v)] for v in grids.values()] or [np.array([1.0])])
+zmax = float(np.nanmax(np.abs(finite))) if finite.size else 1.0  # one shared, symmetric scale
+
+fig = make_subplots(rows=1, cols=3, shared_yaxes=True, horizontal_spacing=0.04,
+                    subplot_titles=[f"{r} ({'fee' if r == 'Collateral upgrade' else 'spread'})"
+                                    for r in ROUTES])
+for i, route in enumerate(ROUTES, start=1):
+    z = grids[route]
+    role_bp = z + ks_bp[:, None]
+    custom = np.dstack([role_bp.astype(object),
+                        np.where(z >= 0, "clears", "misses").astype(object)])
+    fig.add_trace(go.Heatmap(
+        x=spreads_bp, y=ks_bp, z=z, coloraxis="coloraxis", customdata=custom,
+        hovertemplate=("spread %{x:.0f} bp<br>k %{y:.0f} bp<br>RoLE %{customdata[0]:.1f} bp"
+                       "<br>RoLE − k %{z:.1f} bp<br>%{customdata[1]}<extra>" + route
+                       + "</extra>")), row=1, col=i)
+    if np.isfinite(z).any() and np.nanmin(z) < 0 < np.nanmax(z):
+        fig.add_trace(go.Contour(
+            x=spreads_bp, y=ks_bp, z=z, showscale=False, hoverinfo="skip",
+            contours={"start": 0, "end": 0, "size": 1, "coloring": "lines"},
+            line={"width": 3, "color": INK}, colorscale=[[0, INK], [1, INK]]), row=1, col=i)
+    row = cap.loc[route]
+    fig.add_trace(go.Scatter(
+        x=[row["current_spread"] * 1e4], y=[k * 1e4], mode="markers", showlegend=False,
+        marker={"size": 13, "symbol": "circle", "color": INK,
+                "line": {"color": SURFACE, "width": 2}},
+        hovertemplate=(f"current: {row['current_spread'] * 1e4:.1f} bp, k {k * 1e4:.0f} bp"
+                       "<extra>" + route + "</extra>")), row=1, col=i)
+style(fig, "RoLE minus k by client spread and k (blue clears, red misses; white line = 0)",
+      height=430)
+fig.update_xaxes(range=[s_min, s_max], title_text="Client spread (bp)")
+fig.update_yaxes(range=[k_min, k_max])
+fig.update_yaxes(title_text="k (bp)", row=1, col=1)
+fig.update_layout(coloraxis={"colorscale": DIVERGING, "cmin": -zmax, "cmax": zmax, "cmid": 0,
+                             "colorbar": {"title": {"text": "RoLE − k (bp)"}, "thickness": 12,
+                                          "outlinecolor": AXIS}},
+                  plot_bgcolor=SURFACE, margin={"t": 115})
+show(fig)
+st.caption(" ".join(clearance_sentence(r, cap.loc[r], k) for r in ROUTES))
+explain("spread vs k heatmaps", f"""
+Each cell is RoLE(s) − k for client spread s (upgrade: fee) and balance-sheet charge k.
+Dealer net is linear in the route's own spread, net(s) = a + b·s·τ, where b is the amount the
+spread is charged on (PB loan, TRS notional, upgrade notional) and a = net(quoted) − b·s_quoted·τ.
+Leverage exposure LE depends on neither s nor k, so
+
+RoLE(s) = (a + b·s·τ) / (LE·τ), cell = RoLE(s) − k, τ = {x.tenor_days}/365.
+
+Blue cells clear (RoLE ≥ k), red cells miss. The white line is RoLE = k, i.e. the required
+spread at each k: s*(k) = (k·LE·τ − a) / (b·τ), a straight line along which the required
+spread rises LE / b bp per bp of k. The route using the most leverage per GBP of spread base
+needs the most extra spread as k rises (shallowest line). All three
+panels share one symmetric colour scale (±{zmax:.0f} bp), so colours compare across routes. The
+white dot is the quoted spread at the current k.
+""")

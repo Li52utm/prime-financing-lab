@@ -17,7 +17,7 @@ import pytest
 from engine.capital import (
     CapitalInputs, NettingSetTrade, best_for_desk, capital_comparison, comprehensive_exposure,
     default_capital_inputs, derivative_leverage_exposure, equity_haircut_10d, k_grid, k_sensitivity,
-    trs_im_spread_for_hurdle, trs_vs_im_remuneration,
+    role_grid, trs_im_spread_for_hurdle, trs_vs_im_remuneration,
     pb_capital, pb_rwa_by_margin, return_on, saccr_ead, saccr_equity_addon,
     saccr_mf_margined, saccr_mf_unmargined, saccr_multiplier, saccr_replacement_cost,
     scaled_haircut, sft_leverage_addon, trs_capital, trs_mtm_from_price_move, trs_saccr,
@@ -453,3 +453,38 @@ def test_break_even_k():
     at_be = capital_comparison(replace(x, shadow_cost_k=be), cap()).set_index("route")
     assert at_be.loc["TRS", "role_hurdle_cushion_bp"] == approx(0.0, abs=1e-9)
     assert at_be.loc["TRS", "clears_role_hurdle"]
+
+
+# --- Spread vs k grid ------------------------------------------------------------------------
+
+def test_role_grid_hand_worked_cell():
+    """TRS at tau 0.2 (73 days). a = net - b x s0 x tau = 24,600 - 10m x 0.4% x 0.2 = 16,600.
+    Cell s = 1.00%, k = 1.00%: net = 16,600 + 10m x 1% x 0.2 = 36,600
+    LE x tau = 13,003,516.91 x 0.2 = 2,600,703.38
+    RoLE = 36,600 / 2,600,703.38 = 1.4073116%; RoLE - k = 0.4073116% (clears)
+    """
+    g = role_grid(fin(tenor_days=73, holding_period_days=73), cap(), "TRS", [0.01], [0.01])
+    assert len(g) == 1
+    assert g.loc[0, "role"] == approx(0.014073116)
+    assert g.loc[0, "role_minus_k"] == approx(0.004073116)
+
+
+@pytest.mark.parametrize("route,field", [("PB", "pb_spread"), ("TRS", "trs_spread"),
+                                         ("Collateral upgrade", "upgrade_fee")])
+def test_role_grid_matches_full_engine(route, field):
+    """The linear shortcut must agree with re-running capital_comparison at each cell."""
+    x, c = fin(), cap()
+    spreads, ks = [0.0, 0.0035, 0.009, 0.015], [0.0, 0.0025, 0.01]
+    g = role_grid(x, c, route, spreads, ks)
+    assert len(g) == len(spreads) * len(ks)
+    for _, cell in g.iterrows():
+        full = capital_comparison(replace(x, **{field: cell["spread"], "shadow_cost_k": cell["k"]}),
+                                  c).set_index("route").loc[route]
+        assert cell["role"] == approx(full["role"])
+        assert cell["role_minus_k"] == approx(full["role"] - cell["k"])
+        assert (cell["role_minus_k"] >= 0) == bool(full["clears_role_hurdle"])
+
+
+def test_role_grid_zero_leverage_is_nan():
+    g = role_grid(fin(gilt_source="inventory"), cap(), "Collateral upgrade", [0.003], [0.005])
+    assert g["role"].isna().all()

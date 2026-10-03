@@ -318,3 +318,10 @@ NETTING_DEFAULT_CASE = "different_name"  # "different_name" or "same_name"
 
 # Own assumption: upper end of the TRS spread axis on the client breakeven chart (decimal).
 BREAKEVEN_CHART_MAX_SPREAD = 0.03
+
+# Own assumptions (display only): default axes of the Summary "Spread vs k" heatmaps, in bp.
+HEATMAP_SPREAD_MIN_BP = 0.0  # x axis: client spread / upgrade fee
+HEATMAP_SPREAD_MAX_BP = 150.0  # x axis upper end
+HEATMAP_K_MIN_BP = 0.0  # y axis: balance-sheet charge k
+HEATMAP_K_MAX_BP = 100.0  # y axis upper end
+HEATMAP_STEP_BP = 5.0  # cell size on both axes

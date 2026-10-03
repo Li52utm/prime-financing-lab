@@ -143,3 +143,77 @@ def test_assumptions_reader_tags():
     assert d.loc["STRESS_PRESETS", "Type"] == "Hypothetical"
     assert d.loc["SDRT_RATE", "Status"] == "UNVERIFIED"
     assert (d["Source / comment"].str.strip() != "").all()  # every default has a comment
+
+
+# --- Summary: Spread vs k heatmaps ------------------------------------------------------------
+
+def heatmap_spec(at: AppTest) -> dict:
+    specs = [json.loads(s) for s in chart_specs(at)]
+    hm = [s for s in specs if any(t["type"] == "heatmap" for t in s["data"])]
+    assert len(hm) == 1
+    return hm[0]
+
+
+def test_heatmaps_three_panels_shared_scale():
+    at = open_page("Summary")
+    spec = heatmap_spec(at)
+    types = [t["type"] for t in spec["data"]]
+    assert types.count("heatmap") == 3
+    assert all(t.get("coloraxis") == "coloraxis" for t in spec["data"] if t["type"] == "heatmap")
+    ca = spec["layout"]["coloraxis"]
+    assert ca["cmid"] == 0 and ca["cmin"] == -ca["cmax"]  # one symmetric scale centred on 0
+    contours = [t for t in spec["data"] if t["type"] == "contour"]
+    assert len(contours) == 3
+    assert all(t["contours"]["start"] == 0 and t["line"]["width"] >= 3 for t in contours)
+    # one current-position marker per route at quoted spread and current k (default 50 bp)
+    markers = [t for t in spec["data"] if t["type"] == "scatter"]
+    assert [m["x"][0] for m in markers] == pytest.approx([50.0, 40.0, 30.0])
+    assert all(m["y"][0] == pytest.approx(50.0) for m in markers)
+    # default axes 0-150 bp spread, 0-100 bp k
+    assert spec["layout"]["xaxis"]["range"] == [0, 150]
+    assert spec["layout"]["yaxis"]["range"] == [0, 100]
+    assert spec["layout"]["title"]["subtitle"]["text"] == SUBTITLE
+    hover = [t["hovertemplate"] for t in spec["data"] if t["type"] == "heatmap"][0]
+    for word in ("spread", "k ", "RoLE", "RoLE − k", "customdata[1]"):
+        assert word in hover
+
+
+def test_heatmap_caption_and_explainer():
+    at = open_page("Summary")
+    caption = " ".join(c.value for c in at.caption)
+    assert "PB needs 89 bp to clear k = 50 bp (quoted 50 bp); at its quoted spread it clears " \
+           "for k up to 15 bp." in caption
+    assert "TRS needs 93 bp" in caption and "Collateral upgrade needs 76 bp" in caption
+    assert any(e.label == "How is this calculated: spread vs k heatmaps" for e in at.expander)
+
+
+def test_heatmap_axis_ranges_adjustable():
+    at = open_page("Summary")
+    at.number_input(key="hm_s_max").set_value(300.0)
+    at.number_input(key="hm_k_max").set_value(200.0)
+    at.run()
+    assert not at.exception
+    spec = heatmap_spec(at)
+    assert spec["layout"]["xaxis"]["range"] == [0, 300]
+    assert spec["layout"]["yaxis"]["range"] == [0, 200]
+    # invalid range falls back to defaults with a warning
+    at.number_input(key="hm_s_min").set_value(400.0).run()
+    assert not at.exception
+    assert any("showing the defaults" in w.value for w in at.warning)
+    assert heatmap_spec(at)["layout"]["xaxis"]["range"] == [0, 150]
+
+
+def test_heatmap_runs_with_zero_leverage_upgrade():
+    at = open_page("Summary", {("selectbox", "gilt_source"): "inventory"})
+    assert not at.exception, [e.value for e in at.exception]
+    assert "Collateral upgrade: RoLE undefined" in " ".join(c.value for c in at.caption)
+    assert [t["type"] for t in heatmap_spec(at)["data"]].count("contour") == 2
+
+
+def test_clearance_sentence_never_clears():
+    from ui.common import clearance_sentence
+    row = {"role": -0.0006, "break_even_k": -0.0006, "required_spread_role": 0.0085,
+           "current_spread": 0.003}
+    s = clearance_sentence("Collateral upgrade", row, 0.005)
+    assert s == ("Collateral upgrade needs 85 bp to clear k = 50 bp (quoted 30 bp); at its quoted "
+                 "fee it clears at no k ≥ 0.")

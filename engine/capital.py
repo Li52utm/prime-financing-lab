@@ -510,6 +510,39 @@ def trs_vs_im_remuneration(x: FinancingInputs, c: CapitalInputs,
     return pd.DataFrame(rows)
 
 
+ROUTE_SPREADS = {  # route -> (FinancingInputs field the client pays, amount it is charged on)
+    "PB": ("pb_spread", lambda x: x.notional * (1 - x.pb_margin)),
+    "TRS": ("trs_spread", lambda x: x.notional),
+    "Collateral upgrade": ("upgrade_fee", lambda x: x.notional),
+}
+
+
+def role_grid(x: FinancingInputs, c: CapitalInputs, route: str, spreads: list[float],
+              ks: list[float]) -> pd.DataFrame:
+    """RoLE minus k for every (client spread, k) pair of one route. Long format: one row per
+    cell with columns spread, k, role, role_minus_k (decimals).
+
+    Dealer net is linear in the route's own spread, net(s) = a + b * s * tau, with
+    a = net(s0) - b * s0 * tau and b the amount the spread is charged on. Leverage exposure
+    depends on neither the spread nor k, so RoLE(s) = (a + b * s * tau) / (LE * tau) and each
+    cell is RoLE(s) - k, evaluated without re-running the engine. NaN where LE is 0.
+    """
+    field_name, base_fn = ROUTE_SPREADS[route]
+    route_fn = {"PB": pb_route, "TRS": trs_route, "Collateral upgrade": upgrade_route}[route]
+    cap_fn = {"PB": pb_capital, "TRS": trs_capital, "Collateral upgrade": upgrade_capital}[route]
+    tau = year_fraction(x.tenor_days)
+    s0 = getattr(x, field_name)
+    b = base_fn(x)
+    a = route_fn(x).dealer_net - b * s0 * tau
+    le = cap_fn(x, c).leverage_exposure
+    rows = []
+    for k in ks:
+        for s in spreads:
+            role = (a + b * s * tau) / (le * tau) if le > 0 else float("nan")
+            rows.append({"spread": s, "k": k, "role": role, "role_minus_k": role - k})
+    return pd.DataFrame(rows)
+
+
 def capital_comparison(x: FinancingInputs, c: CapitalInputs) -> pd.DataFrame:
     """One row per route. RoLE is the headline balance-sheet metric; the shadow cost k is
     charged on leverage exposure and is the RoLE hurdle. Required spreads are reported
