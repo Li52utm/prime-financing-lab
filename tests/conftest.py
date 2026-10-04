@@ -10,7 +10,7 @@ leak into another.
 import pytest
 import streamlit as st
 
-from data import macro, markets, sonia
+from data import forecast_store, macro, markets, sonia
 
 
 def _no_network(*args, **kwargs):
@@ -45,4 +45,11 @@ def offline_macro(monkeypatch, tmp_path):
     monkeypatch.setattr(macro, "fetch_live", _no_market_network)
     monkeypatch.setattr(macro, "_get", _no_market_network)
     monkeypatch.setattr(macro, "CACHE_DIR", tmp_path / "cache" / "macro")
+    yield
+
+
+@pytest.fixture(autouse=True)
+def isolated_forecasts(monkeypatch, tmp_path):
+    """Forecast Lab reads an empty temporary folder unless a test writes results into it."""
+    monkeypatch.setattr(forecast_store, "FORECAST_DIR", tmp_path / "forecasts")
     yield

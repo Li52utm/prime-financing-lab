@@ -403,3 +403,29 @@ BYOD_MAX_ROWS = 200_000  # own assumption: enough for ~800 years of daily data
 # own assumption: median gap between dates (calendar days, inclusive) that maps to each frequency
 BYOD_FREQ_GAP_DAYS = {"daily": (1, 4), "weekly": (5, 10), "monthly": (25, 35)}
 BYOD_MAX_LINES = 4  # chart line styles available (series_chart palette has four roles)
+
+
+# =============================================================================
+# Forecast Lab (Phase 8): EXPERIMENTAL. Offline walk-forward test in scripts/run_forecasts.py.
+# Every setting below was fixed before the first run and is never tuned on the test period.
+# =============================================================================
+
+FORECAST_SERIES = ("ftse100", "spx", "gbpusd")  # own assumption: two equity indices (Yahoo) and one official FX rate (BoE)
+FORECAST_SAMPLE_START = "1990-01-01"  # own assumption: common modern sample for all three series
+FORECAST_MIN_TRAIN_DAYS = 1260  # own assumption: ~5 years of daily returns before the first forecast
+FORECAST_REFIT_DAYS = 21  # own assumption: ridge, logistic and drift refitted about monthly
+FORECAST_GARCH_REFIT_DAYS = 252  # own assumption: GARCH(1,1) refitted about yearly (fitting cost)
+FORECAST_VOL_HORIZON = 10  # user specification: next-10-day volatility
+FORECAST_RETURN_HORIZONS = (1, 5)  # user specification: next-day and next-5-day direction and return
+FORECAST_EWMA_LAMBDA = 0.94  # RiskMetrics (J.P. Morgan, 1996) daily decay factor; public convention
+FORECAST_EWMA_SEED_DAYS = 60  # own assumption: EWMA seeded with the mean of the first 60 squared returns
+FORECAST_LAGS = 5  # own assumption: daily return lags used as features
+FORECAST_VOL_WINDOW = 20  # own assumption: trailing realised-volatility feature window (days)
+FORECAST_RIDGE_ALPHA = 1.0  # own assumption: ridge penalty on standardised features, fixed (not tuned)
+FORECAST_LOGIT_L2 = 1.0  # own assumption: logistic L2 penalty on standardised features, fixed (not tuned)
+FORECAST_COST_BP = 5.0  # own assumption: one-way transaction cost per position change, in bp of capital
+FORECAST_BOOT_BLOCK = 20  # own assumption: block length (days) for the moving-block bootstrap, > 10-day target overlap
+FORECAST_BOOT_N = 2000  # own assumption: bootstrap replicates
+FORECAST_BOOT_SEED = 20261004  # own assumption: fixed seed so reruns give the same intervals
+FORECAST_CONFIDENCE = 0.95  # own assumption: two-sided interval on the loss difference versus naive
+FORECAST_TRADING_DAYS = 252  # annualisation for the equity-curve statistics (own convention)

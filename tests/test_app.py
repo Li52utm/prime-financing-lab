@@ -28,6 +28,7 @@ PAGES = {
     "Glossary": "views/glossary_page.py",
     "Concept Trainer": "views/trainer_page.py",
     "Bring your own data": "views/byod_page.py",
+    "Forecast Lab": "views/forecast_page.py",
 }
 PAGES_WITH_HEADLINES = ["Summary", "Client view", "Desk view", "Capital", "Stress lab"]
 
@@ -52,7 +53,7 @@ def chart_specs(at: AppTest) -> list[str]:
 
 
 NO_TICKET_PAGES = {"Markets", "Rates & Liquidity", "Desk Brief", "Glossary", "Concept Trainer",
-                   "Bring your own data"}  # no trade-context banner
+                   "Bring your own data", "Forecast Lab"}  # no trade-context banner
 
 
 @pytest.mark.parametrize("page", [p for p in PAGES if p not in NO_TICKET_PAGES])
@@ -777,3 +778,81 @@ def test_byod_clear_session():
     at.button(key="byod_clear").click().run()
     assert not at.exception
     assert at.session_state.byod_store == {}
+
+
+# --- Phase 8: Forecast Lab (EXPERIMENTAL) -----------------------------------------------------
+
+def write_forecast_results(monkeypatch):
+    """Run the offline script on synthetic closes (no network, GARCH off) into the test folder."""
+    import importlib
+    from datetime import date
+
+    import assumptions as A_
+    from data import forecast_store as FS
+
+    monkeypatch.syspath_prepend(str(APP.parent / "scripts"))
+    run = importlib.import_module("run_forecasts")
+    monkeypatch.setattr(run, "arch_model", None)
+    monkeypatch.setattr(A_, "FORECAST_MIN_TRAIN_DAYS", 300)
+
+    def fake_load(key):
+        rng = np.random.default_rng(len(key))
+        idx = pd.date_range("2018-01-01", periods=900, freq="B")
+        close = 100 * np.exp(np.cumsum(rng.normal(0.0002, 0.01, 900)))
+        return markets_mod.MarketSeries(markets_mod.SERIES[key], pd.DataFrame({"close": close}, index=idx),
+                                "cached", date(2021, 6, 11), "2026-10-02T07:00:00")
+
+    monkeypatch.setattr(markets_mod, "load_series", fake_load)
+    run.main()
+    return FS.FORECAST_DIR
+
+
+def test_forecast_lab_missing_results():
+    at = open_page("Forecast Lab")
+    assert not at.exception, [e.value for e in at.exception]
+    assert "EXPERIMENTAL" in at.warning[0].value
+    assert at.error and "run scripts/run_forecasts.py" in at.error[0].value
+    assert not chart_specs(at)
+
+
+def test_forecast_lab_shows_saved_results(monkeypatch):
+    write_forecast_results(monkeypatch)
+    at = open_page("Forecast Lab")
+    assert not at.exception, [e.value for e in at.exception]
+    assert "EXPERIMENTAL" in at.warning[0].value
+    assert any("cached copy fetched 2026-10-02 07:00" in w.value for w in at.warning)
+    md = " ".join(m.value for m in at.markdown)
+    assert "historical out-of-sample test" in md and "past data only" in md
+    specs = [json.loads(s) for s in chart_specs(at)]
+    assert len(specs) == 2
+    for sp in specs:
+        assert sp["layout"]["title"]["subtitle"]["text"].startswith("EXPERIMENTAL · Daily")
+    assert "NET OF 5 BP" in specs[1]["layout"]["title"]["text"]
+    verdicts = at.dataframe[0].value["Verdict"].tolist()
+    assert len(verdicts) == 10 and all(v.split(" (")[0] in ("beats naive", "does not beat naive",
+                                                           "inconclusive") for v in verdicts)
+    at.selectbox(key="fl_series").set_value("GBP/USD")
+    at.radio(key="fl_range").set_value("Max").run()
+    assert not at.exception
+    assert any("no interest carry" in c.value for c in at.caption)
+
+
+def test_forecast_lab_corrupt_and_missing_files(monkeypatch):
+    folder = write_forecast_results(monkeypatch)
+    (folder / "ftse100_vol.csv").unlink()
+    at = open_page("Forecast Lab")
+    assert not at.exception
+    assert any("Missing results file ftse100_vol.csv" in e.value for e in at.error)
+    assert len(chart_specs(at)) == 1  # the equity chart still shows
+    (folder / "summary.json").write_text("{not json", encoding="utf-8")
+    at = open_page("Forecast Lab")
+    assert not at.exception
+    assert "could not be read" in at.error[0].value
+
+
+def test_forecast_page_never_fits():
+    """The page only reads saved results: no fitting library or model code is referenced."""
+    src = (APP.parent / "views" / "forecast_page.py").read_text(encoding="utf-8")
+    for needle in ("import arch", "from arch", "analytics.forecast", "fit_", "walk_forward",
+                   "garch_forecasts"):
+        assert needle not in src, needle
