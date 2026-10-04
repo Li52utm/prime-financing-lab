@@ -573,3 +573,65 @@ def test_brief_error_mode():
     at = macro_open("Desk Brief", mode="error")
     assert not at.exception, [e.value for e in at.exception]
     assert at.error and "No series could be loaded" in at.error[0].value
+
+
+# --- Phase 5: Markets upgrades ----------------------------------------------------------------
+
+def synthetic_varied(key: str, n: int = 900) -> pd.DataFrame:
+    """Like synthetic() but each series gets its own path (so correlations are not all 1)."""
+    idx = pd.bdate_range(end="2026-10-02", periods=n)
+    rng = np.random.default_rng(sorted(markets_mod.SERIES).index(key) + 1)
+    if markets_mod.SERIES[key].is_yield:
+        return pd.DataFrame({"close": 3.5 + np.cumsum(rng.normal(0, 0.03, n))}, index=idx)
+    close = 100 * np.exp(np.cumsum(rng.normal(0, 0.01, n)))
+    df = pd.DataFrame({"close": close}, index=idx)
+    if markets_mod.SERIES[key].has_ohlc:
+        df = df.assign(open=close * 0.999, high=close * 1.01, low=close * 0.99,
+                       volume=1e6)[["open", "high", "low", "close", "volume"]]
+    return df
+
+
+MARKET_SECTIONS = ["Cross-asset correlation", "Rolling correlation and beta for a pair",
+                   "Volatility regimes: FTSE 100", "Daily change distribution: FTSE 100",
+                   "Seasonality by calendar month: FTSE 100"]
+
+
+def test_markets_upgrades_live(monkeypatch):
+    monkeypatch.setattr(markets_mod, "fetch_live", synthetic_varied)
+    at = open_page("Markets")
+    assert not at.exception, [e.value for e in at.exception]
+    subs = [s.value for s in at.subheader]
+    for s in MARKET_SECTIONS:
+        assert s in subs
+    specs = [json.loads(s) for s in chart_specs(at)]
+    titles = [sp["layout"]["title"]["text"] for sp in specs]
+    assert "CORRELATION OF DAILY CHANGES, LAST 1Y" in titles
+    import base64
+    heat = next(sp for sp in specs if sp["data"][0]["type"] == "heatmap")["data"][0]["z"]
+    if isinstance(heat, dict):  # plotly's binary array encoding
+        z = np.frombuffer(base64.b64decode(heat["bdata"]), dtype=heat["dtype"]).reshape(
+            [int(v) for v in heat["shape"].split(",")])
+    else:
+        z = np.array(heat, dtype=float)
+    assert z.shape == (6, 6) and np.allclose(np.diag(z), 1) and np.allclose(z, z.T, equal_nan=True)
+    # every new chart carries frequency, source and as-of (or date span) in its subtitle
+    for sp in specs[1:]:
+        sub_ = sp["layout"]["title"]["subtitle"]["text"]
+        assert sub_.startswith(("Daily · ", "Monthly ")), sub_
+    assert any("Small samples" in c.value for c in at.caption)
+    assert any("observed against" in c.value for c in at.caption)
+
+
+def test_markets_upgrades_controls(monkeypatch):
+    monkeypatch.setattr(markets_mod, "fetch_live", synthetic_varied)
+    at = open_page("Markets")
+    at.radio(key="mkt_corr_win").set_value("3M")
+    at.selectbox(key="mkt_pair_a").set_value("uk10y")
+    at.selectbox(key="mkt_roll").set_value(20)
+    at.radio(key="mkt_range").set_value("Max")
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    titles = [json.loads(s)["layout"]["title"]["text"] for s in chart_specs(at)]
+    assert "CORRELATION OF DAILY CHANGES, LAST 3M" in titles
+    assert any(t.startswith("UK 10-YEAR GILT YIELD VS") for t in titles)
+    assert any("bp of A per 1" in c.value for c in at.caption)

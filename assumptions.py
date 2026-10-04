@@ -358,3 +358,16 @@ BRIEF_TOP_MOVERS = 5  # own assumption: how many largest movers the brief lists
 BRIEF_COMPARE_DAYS = 30  # own assumption: funding-condition changes compare with ~1 month earlier
 BRIEF_LOOKBACK_MONTHS = {"1Y": 12, "5Y": 60, "10Y": 120, "Max": None}  # history windows offered
 BRIEF_DEFAULT_LOOKBACK = "5Y"  # own assumption: history used for z-scores and percentiles
+
+
+# --- Markets page upgrades (Phase 5; display analytics only) ------------------------------------
+
+MARKETS_CORR_WINDOWS = {"3M": 63, "1Y": 252, "3Y": 756, "5Y": 1260, "Max": None}  # common trading days
+MARKETS_CORR_DEFAULT = "1Y"  # own assumption: correlation window shown on first load
+MARKETS_ROLL_WINDOWS = (20, 60, 120, 250)  # rolling correlation / beta windows (trading days)
+MARKETS_ROLL_DEFAULT = 60  # own assumption: roughly one quarter of trading days
+MARKETS_MIN_OBS = 20  # own assumption: fewest common observations before a correlation is shown
+MARKETS_REGIME_PCTS = (25, 75)  # own assumption: rolling vol below the 25th pct = low, above 75th = high
+MARKETS_TAIL_PCTS = (1, 5, 95, 99)  # empirical percentiles of daily changes shown against a normal
+MARKETS_HIST_BINS = 80  # histogram bins for the return distribution
+MARKETS_SEASON_MIN_N = 10  # own assumption: months with fewer observations are flagged small-sample
