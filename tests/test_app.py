@@ -27,6 +27,7 @@ PAGES = {
     "Desk Brief": "views/brief_page.py",
     "Glossary": "views/glossary_page.py",
     "Concept Trainer": "views/trainer_page.py",
+    "Bring your own data": "views/byod_page.py",
 }
 PAGES_WITH_HEADLINES = ["Summary", "Client view", "Desk view", "Capital", "Stress lab"]
 
@@ -50,7 +51,8 @@ def chart_specs(at: AppTest) -> list[str]:
     return [el.proto.spec for el in at.get("plotly_chart")]
 
 
-NO_TICKET_PAGES = {"Markets", "Rates & Liquidity", "Desk Brief", "Glossary", "Concept Trainer"}  # no trade-context banner
+NO_TICKET_PAGES = {"Markets", "Rates & Liquidity", "Desk Brief", "Glossary", "Concept Trainer",
+                   "Bring your own data"}  # no trade-context banner
 
 
 @pytest.mark.parametrize("page", [p for p in PAGES if p not in NO_TICKET_PAGES])
@@ -690,3 +692,88 @@ def test_replay_cached_and_error_modes():
     at = open_page("Replay history")
     assert not at.exception, [e.value for e in at.exception]
     assert any("cached copy fetched 2026-10-01 08:30" in w.value for w in at.warning)
+
+
+# --- Phase 7: Bring your own data -------------------------------------------------------------
+
+def byod_csv(n: int = 400) -> bytes:
+    idx = pd.date_range("2023-01-02", periods=n, freq="B")
+    rng = np.random.default_rng(7)
+    a = 4.0 + np.cumsum(rng.normal(0, 0.02, n))
+    b = 3.5 + np.cumsum(rng.normal(0, 0.02, n))
+    rows = ["Date,Rate A,Rate B"] + [f"{d:%d/%m/%Y},{x:.4f},{y:.4f}" for d, x, y in zip(idx, a, b)]
+    return "\n".join(rows).encode("utf-8")
+
+
+def byod_with_data(via: str = "upload") -> AppTest:
+    at = open_page("Bring your own data")
+    if via == "upload":
+        at.get("file_uploader")[0].upload("rates.csv", byod_csv(), "text/csv")
+        at.run()
+    else:
+        at.radio(key="byod_how").set_value("Paste CSV text").run()
+        at.text_area(key="byod_paste").set_value(byod_csv().decode()).run()
+    at.selectbox(key="byod_fmt").set_value("DD/MM/YYYY")
+    at.multiselect(key="byod_values").set_value(["Rate A", "Rate B"])
+    at.text_input(key="byod_unit").set_value("%")
+    at.button(key="byod_add").click().run()
+    return at
+
+
+def test_byod_empty_state_warns_and_stops():
+    at = open_page("Bring your own data")
+    assert not at.exception, [e.value for e in at.exception]
+    w = " ".join(x.value for x in at.warning)
+    assert "USER-SUPPLIED" in w and "never written to disk" in w and "confidential" in w
+    assert any("No user series in this session" in i.value for i in at.info)
+    assert not chart_specs(at)
+
+
+@pytest.mark.parametrize("via", ["upload", "paste"])
+def test_byod_upload_map_chart_and_brief(via, tmp_path, monkeypatch):
+    monkeypatch.chdir(tmp_path)  # anything written relative to the cwd would land here
+    at = byod_with_data(via)
+    assert not at.exception, [e.value for e in at.exception]
+    assert not at.error, [e.value for e in at.error]
+    assert len(at.success) == 2 and "Nothing was filled" in at.success[0].value
+    assert set(at.session_state.byod_store) == {"Rate A", "Rate B"}
+    spec = json.loads(chart_specs(at)[0])
+    assert spec["layout"]["title"]["text"].startswith("USER-SUPPLIED")
+    sub = spec["layout"]["title"]["subtitle"]["text"]
+    assert sub.startswith("Daily · USER-SUPPLIED") and "as of" in sub
+    assert "RULES-BASED, NOT A FORECAST" in at.info[0].value
+    md = " ".join(m.value for m in at.markdown)
+    assert "Rate A stood at" in md and "change z" in md
+    assert list(tmp_path.iterdir()) == []  # nothing written to disk
+
+
+def test_byod_spread_builder_and_bands():
+    at = byod_with_data()
+    at.selectbox(key="byod_sp_a").set_value("Rate A")
+    at.selectbox(key="byod_sp_b").set_value("Rate B")
+    at.radio(key="byod_sp_scale").set_value("x100 (% to bp)").run()
+    at.button(key="byod_sp_add").click().run()
+    assert not at.exception, [e.value for e in at.exception]
+    u = at.session_state.byod_store["Rate A − Rate B"]
+    assert u.unit == "bp" and u.frequency == "daily"
+    at.multiselect(key="byod_chart").set_value(["Rate A", "Rate A − Rate B"])
+    at.selectbox(key="byod_bands").set_value("Mean ±1 and ±2 SD").run()
+    assert not at.exception
+    specs = [json.loads(s) for s in chart_specs(at)]
+    assert len(specs) == 2  # % and bp charted separately
+    assert any("+2 SD" in (t.get("name") or "") for t in specs[0]["data"])
+
+
+def test_byod_bad_csv_shows_error():
+    at = open_page("Bring your own data")
+    at.radio(key="byod_how").set_value("Paste CSV text").run()
+    at.text_area(key="byod_paste").set_value("just one column\n1\n2").run()
+    assert not at.exception
+    assert at.error and "two columns" in at.error[0].value
+
+
+def test_byod_clear_session():
+    at = byod_with_data()
+    at.button(key="byod_clear").click().run()
+    assert not at.exception
+    assert at.session_state.byod_store == {}

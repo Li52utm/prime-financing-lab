@@ -392,3 +392,14 @@ REPLAY_EWMA_BURN_IN = 60  # own assumption: EWMA days discarded while the estima
 REPLAY_IM_CONFIDENCE = 0.99
 REPLAY_IM_HORIZON_DAYS = 10  # trading days, with the BCBS-IOSCO horizon above
 REPLAY_CUSTOM_DEFAULT_START = "2020-01-02"  # own assumption: first date offered for a custom window
+
+
+# =============================================================================
+# Bring your own data (Phase 7): user-supplied CSV, session memory only. Display analytics only.
+# =============================================================================
+
+BYOD_MAX_BYTES = 20_000_000  # own assumption: largest CSV accepted (20 MB) to keep the session light
+BYOD_MAX_ROWS = 200_000  # own assumption: enough for ~800 years of daily data
+# own assumption: median gap between dates (calendar days, inclusive) that maps to each frequency
+BYOD_FREQ_GAP_DAYS = {"daily": (1, 4), "weekly": (5, 10), "monthly": (25, 35)}
+BYOD_MAX_LINES = 4  # chart line styles available (series_chart palette has four roles)

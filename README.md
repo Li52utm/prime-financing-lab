@@ -150,6 +150,16 @@ The Markets page shows public market data for context. It is display analytics o
   - Ranges above 1,500 daily bars plot weekly bars and week-end indicator values. The indicator maths always runs on daily data.
 - **Bollinger breaches** are marked on the chart (▼ above the upper band, ▲ below the lower). A table shows how often closes fall outside the bands and the average move over the next 5 and 20 days, next to the all-days average. Bands describe range, not direction.
 
+## Bring your own data (local use)
+
+The "Bring your own data" page (Market data menu) runs a CSV you supply through the same stats strip, mean ±1/±2 SD bands, z-scores and Desk Brief rules as the official series, and builds spreads (A minus B, optionally ×100 to turn % into bp).
+
+- **Run it locally for anything sensitive.** Start the app on your own machine with `.venv\Scripts\python -m streamlit run app.py` and open http://localhost:8501. Do not upload confidential or client data to a hosted copy of the app: on a hosted copy the file travels to that server.
+- **Session memory only.** Uploaded files and pasted text are held in the Streamlit session (`st.session_state`). The app never writes them to disk, never caches them in `data/cache/`, and they are gone when the session ends or you press "Clear all user data". A test checks that the parsing module has no file calls and that an upload writes nothing to the working directory.
+- **Format:** one date column and one or more value columns, comma, semicolon, tab or pipe separated, UTF-8 (with or without BOM). Pick the date format (ISO, DD/MM/YYYY, MM/DD/YYYY, auto, or Excel serial numbers). Thousands separators and a trailing % are stripped.
+- **Nothing is filled.** Rows whose date or value does not parse are dropped and counted; for repeated dates the last row is kept. Frequency (daily, weekly or monthly) is inferred from the median gap between dates or chosen by you; other spacings are rejected, never resampled.
+- Everything on the page is labelled USER-SUPPLIED. The brief rules are descriptive and are not a forecast.
+
 ## Running the tests
 
 ```

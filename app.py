@@ -28,6 +28,7 @@ pages = {
         st.Page("views/markets_page.py", title="Markets"),
         st.Page("views/rates_page.py", title="Rates & Liquidity"),
         st.Page("views/brief_page.py", title="Desk Brief"),
+        st.Page("views/byod_page.py", title="Bring your own data"),
     ],
     "Learn": [
         st.Page("views/glossary_page.py", title="Glossary"),
