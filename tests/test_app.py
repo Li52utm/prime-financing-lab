@@ -1,5 +1,6 @@
 """Smoke tests for the Streamlit app (Prime Financing Lab) using Streamlit's AppTest."""
 
+import html
 import json
 from pathlib import Path
 
@@ -21,6 +22,7 @@ PAGES = {
     "Stress lab": "views/stress_page.py",
     "Assumptions": "views/assumptions_page.py",
     "Markets": "views/markets_page.py",
+    "Rates & Liquidity": "views/rates_page.py",
 }
 PAGES_WITH_HEADLINES = ["Summary", "Client view", "Desk view", "Capital", "Stress lab"]
 
@@ -44,7 +46,10 @@ def chart_specs(at: AppTest) -> list[str]:
     return [el.proto.spec for el in at.get("plotly_chart")]
 
 
-@pytest.mark.parametrize("page", [p for p in PAGES if p != "Markets"])  # no trade context
+NO_TICKET_PAGES = {"Markets", "Rates & Liquidity"}  # market data pages: no trade-context banner
+
+
+@pytest.mark.parametrize("page", [p for p in PAGES if p not in NO_TICKET_PAGES])
 def test_page_runs_with_banner(page):
     at = open_page(page)
     assert not at.exception, [e.value for e in at.exception]
@@ -60,7 +65,7 @@ def test_banner_and_theme_on_every_page(page):
     banners = [v for v in md if 'data-testid="pfl-banner"' in v]
     assert len(banners) == 1
     b = banners[0]
-    assert "PRIME FINANCING LAB" in b and f"/ {page.upper()}" in b
+    assert "PRIME FINANCING LAB" in b and f"/ {html.escape(page.upper())}" in b
     assert "SONIA 4.0000%" in b and "FALLBACK" in b  # conftest: offline -> placeholder
     assert not at.title  # page headers replaced by the banner
     for text in md + [w.value for w in at.warning] + [i.value for i in at.info]:
@@ -404,3 +409,75 @@ def test_markets_error_mode():
     assert len(at.error) == 1
     assert "No data for FTSE 100" in at.error[0].value and "no cached copy" in at.error[0].value
     assert not at.metric and not chart_specs(at)
+
+
+# --- Rates & Liquidity: live, cached and error modes (network mocked) ---------------------
+
+from data import macro as macro_mod  # noqa: E402
+
+
+def synthetic_macro(key: str) -> pd.Series:
+    spec = macro_mod.SERIES[key]
+    freq = {"daily": "B", "weekly": "W-WED", "monthly": "MS"}[spec.frequency]
+    n = {"daily": 900, "weekly": 260, "monthly": 120}[spec.frequency]
+    idx = pd.date_range(end="2026-10-01", periods=n, freq=freq)
+    rng = np.random.default_rng(abs(hash(key)) % 2**32)
+    if spec.unit == "%":
+        return pd.Series(3.0 + np.cumsum(rng.normal(0, 0.02, n)), index=idx)
+    return pd.Series(500_000 + np.cumsum(rng.normal(0, 2_000, n)), index=idx)
+
+
+def rates_open(monkeypatch=None, mode="live"):
+    if mode == "live":
+        monkeypatch.setattr(macro_mod, "fetch_live", synthetic_macro)
+    elif mode == "cached":
+        for key in macro_mod.SERIES:
+            if key not in ("brent", "gbpusd"):
+                macro_mod.write_cache(key, synthetic_macro(key), "2026-10-02T07:00:00")
+    return open_page("Rates & Liquidity")
+
+
+def test_rates_live_mode(monkeypatch):
+    at = rates_open(monkeypatch, "live")
+    assert not at.exception, [e.value for e in at.exception]
+    assert not at.error
+    specs = [json.loads(s) for s in chart_specs(at)]
+    titles = [sp["layout"]["title"]["text"] for sp in specs]
+    assert len(specs) == 6
+    for needle in ("2S10S SLOPE", "SPREAD TO GERMANY, BP, MONTHLY", "EXCESS LIQUIDITY",
+                   "DF + CA", "WEEKLY", "SONIA MINUS BANK RATE"):
+        assert any(needle in t for t in titles), needle
+    for sp in specs:  # every chart states frequency, sources and as-of in its subtitle
+        sub = sp["layout"]["title"]["subtitle"]["text"]
+        assert sub.split(" · ")[0] in ("Daily", "Weekly", "Monthly") and "as of" in sub
+    captions = " ".join(c.value for c in at.caption)
+    assert "Chg = latest month-on-month change" in captions  # no daily stats on monthly data
+    assert "Chg = latest week-on-week change" in captions
+    assert "UK, France and Italy 2s10s are not shown" in captions
+    headers = [list(d.value.columns) for d in at.dataframe]
+    assert any("Chg z (month)" in h for h in headers) and any("Chg z (week)" in h for h in headers)
+
+
+def test_rates_bands_and_events_toggle(monkeypatch):
+    at = rates_open(monkeypatch, "live")
+    at.selectbox(key="rl_bands").set_value("Mean ±1 and ±2 SD").run()
+    assert not at.exception
+    spec = json.loads(chart_specs(at)[0])
+    assert sum("+2 SD" in (t.get("name") or "") for t in spec["data"]) == 3  # one per slope line
+    at.toggle(key="rl_events").set_value(False).run()
+    assert not any("Dated events on this chart" in e.label for e in at.expander)
+
+
+def test_rates_cached_mode():
+    at = rates_open(mode="cached")
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("live fetch failed; showing the cached copy fetched 2026-10-02 07:00" in w.value
+               for w in at.warning)
+    assert len(chart_specs(at)) == 6
+
+
+def test_rates_error_mode():
+    at = rates_open(mode="error")  # no live, no cache
+    assert not at.exception, [e.value for e in at.exception]
+    assert len(at.error) >= 5 and all("no cached copy" in e.value for e in at.error)
+    assert not chart_specs(at)

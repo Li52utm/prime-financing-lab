@@ -9,7 +9,6 @@ Common values:
   MF(91d) = sqrt(91/365) = 0.49931460        AddOn = 0.32 x 10m x MF = 1,597,806.72
 """
 
-import math
 from dataclasses import replace
 
 import pytest

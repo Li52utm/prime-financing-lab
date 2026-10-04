@@ -21,6 +21,7 @@ pages = [
     st.Page("views/capital_page.py", title="Capital"),
     st.Page("views/stress_page.py", title="Stress lab"),
     st.Page("views/markets_page.py", title="Markets"),
+    st.Page("views/rates_page.py", title="Rates & Liquidity"),
     st.Page("views/assumptions_page.py", title="Assumptions"),
 ]
 page = st.navigation(pages, position="top")

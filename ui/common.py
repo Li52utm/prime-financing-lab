@@ -194,12 +194,12 @@ MONO = ('ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "SFMono-Regul
 
 
 def style(fig: go.Figure, title: str, x_title: str | None = None,
-          y_title: str | None = None, height: int = 460) -> go.Figure:
+          y_title: str | None = None, height: int = 460, subtitle: str = SUBTITLE) -> go.Figure:
     """One look for every chart: terminal palette, monospace, the 'Illustrative' subtitle,
     legend below the plot so it never collides with the title block."""
     fig.update_layout(
         template="plotly_dark",
-        title={"text": title.upper(), "subtitle": {"text": SUBTITLE,
+        title={"text": title.upper(), "subtitle": {"text": subtitle,
                                                   "font": {"color": MUTED,
                                                            "size": CHART_TEXT_PX}},
                "font": {"color": ACCENT, "size": CHART_TITLE_PX}, "x": 0, "xanchor": "left",
