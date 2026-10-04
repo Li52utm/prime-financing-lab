@@ -20,6 +20,7 @@ PAGES = {
     "Desk view": "views/desk_page.py",
     "Capital": "views/capital_page.py",
     "Stress lab": "views/stress_page.py",
+    "Replay history": "views/replay_page.py",
     "Assumptions": "views/assumptions_page.py",
     "Markets": "views/markets_page.py",
     "Rates & Liquidity": "views/rates_page.py",
@@ -635,3 +636,57 @@ def test_markets_upgrades_controls(monkeypatch):
     assert "CORRELATION OF DAILY CHANGES, LAST 3M" in titles
     assert any(t.startswith("UK 10-YEAR GILT YIELD VS") for t in titles)
     assert any("bp of A per 1" in c.value for c in at.caption)
+
+
+# --- Phase 6: Replay history --------------------------------------------------------------------
+
+def long_equity(key: str) -> pd.DataFrame:
+    """Synthetic daily index from 2005 so the 2008, 2020 and 2022 windows exist."""
+    return synthetic_varied(key, n=len(pd.bdate_range("2005-01-03", "2026-10-02")))
+
+
+def test_replay_live_preset_and_sections(monkeypatch):
+    monkeypatch.setattr(markets_mod, "fetch_live", long_equity)
+    at = open_page("Replay history")
+    assert not at.exception, [e.value for e in at.exception]
+    assert not at.error
+    subs = [s.value for s in at.subheader]
+    assert any(s.startswith("TRS replay: FTSE 100, 14 Feb 2020") for s in subs)
+    assert "Empirical haircut check: actual 10-day losses vs supervisory haircuts" in subs
+    assert "Volatility-implied IM vs the static ticket IM" in subs
+    assert [m.label for m in at.metric][-5:] == ["Worst day", "VM call that day", "Peak EAD",
+                                                 "Peak RWA", "Dealer financing P&L"]
+    specs = [json.loads(s) for s in chart_specs(at)]
+    assert len(specs) == 3 and all(sp["layout"]["title"]["subtitle"]["text"].startswith("Daily · ")
+                                   for sp in specs)
+    assert any("Simplifications" in e.label for e in at.expander)
+
+
+def test_replay_margined_custom_and_2008(monkeypatch):
+    monkeypatch.setattr(markets_mod, "fetch_live", long_equity)
+    at = open_page("Replay history")
+    at.toggle(key="rp_margined").set_value(True)
+    at.selectbox(key="rp_preset").set_value("2008 (1 Sep 2008 to 31 Mar 2009)")
+    at.selectbox(key="rp_eq").set_value("spx")
+    at.run()
+    assert not at.exception, [e.value for e in at.exception]
+    assert any(s.value.startswith("TRS replay: S&P 500, 01 Sep 2008") for s in at.subheader)
+    assert at.metric[-4].value != "n/a"
+    at.selectbox(key="rp_preset").set_value("Custom dates").run()
+    assert not at.exception and at.get("date_input")
+
+
+def test_replay_window_not_covered(monkeypatch):
+    monkeypatch.setattr(markets_mod, "fetch_live", synthetic_varied)  # starts 2023
+    at = open_page("Replay history")
+    assert not at.exception
+    assert any("does not cover" in e.value for e in at.error) and not chart_specs(at)
+
+
+def test_replay_cached_and_error_modes():
+    at = open_page("Replay history")  # offline, no cache
+    assert not at.exception and any("No data for FTSE 100" in e.value for e in at.error)
+    markets_mod.write_cache("ftse100", long_equity("ftse100"), "2026-10-01T08:30:00")
+    at = open_page("Replay history")
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("cached copy fetched 2026-10-01 08:30" in w.value for w in at.warning)

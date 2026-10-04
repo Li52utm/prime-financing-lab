@@ -371,3 +371,24 @@ MARKETS_REGIME_PCTS = (25, 75)  # own assumption: rolling vol below the 25th pct
 MARKETS_TAIL_PCTS = (1, 5, 95, 99)  # empirical percentiles of daily changes shown against a normal
 MARKETS_HIST_BINS = 80  # histogram bins for the return distribution
 MARKETS_SEASON_MIN_N = 10  # own assumption: months with fewer observations are flagged small-sample
+
+
+# =============================================================================
+# History replay (Phase 6): real equity history through the TRS capital engine. Illustrative.
+# =============================================================================
+
+# Historical windows (labels describe the dates only; they are not stress presets)
+REPLAY_PRESETS = {
+    "March 2020 (14 Feb to 30 Apr 2020)": ("2020-02-14", "2020-04-30"),
+    "2022 (calendar year)": ("2022-01-03", "2022-12-30"),
+    "2008 (1 Sep 2008 to 31 Mar 2009)": ("2008-09-01", "2009-03-31"),
+}
+REPLAY_DEFAULT_PRESET = "March 2020 (14 Feb to 30 Apr 2020)"  # own assumption
+REPLAY_HAIRCUT_HORIZON_DAYS = 10  # supervisory haircuts are 10-day (PRA CRM (CRR) Art 224(1)); trading days used
+REPLAY_EWMA_LAMBDA = 0.94  # RiskMetrics (J.P. Morgan, 1996) daily decay factor; public convention
+REPLAY_EWMA_BURN_IN = 60  # own assumption: EWMA days discarded while the estimate warms up
+# UNVERIFIED: BCBS-IOSCO margin framework for non-centrally cleared derivatives sets IM at a 99% one-tailed,
+# 10-day horizon (para 3.1 as recalled; paragraph not re-checked here). Used as an illustrative benchmark only.
+REPLAY_IM_CONFIDENCE = 0.99
+REPLAY_IM_HORIZON_DAYS = 10  # trading days, with the BCBS-IOSCO horizon above
+REPLAY_CUSTOM_DEFAULT_START = "2020-01-02"  # own assumption: first date offered for a custom window

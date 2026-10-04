@@ -22,6 +22,7 @@ pages = {
         st.Page("views/desk_page.py", title="Desk view"),
         st.Page("views/capital_page.py", title="Capital"),
         st.Page("views/stress_page.py", title="Stress lab"),
+        st.Page("views/replay_page.py", title="Replay history"),
     ],
     "Market data": [
         st.Page("views/markets_page.py", title="Markets"),
