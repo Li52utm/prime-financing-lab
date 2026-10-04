@@ -4,3 +4,4 @@ __pycache__/
 notes_private/
 .pytest_cache/
 data/cache/
+prompts/BUILD_NOTES.md
