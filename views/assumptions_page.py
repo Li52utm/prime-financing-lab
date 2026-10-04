@@ -1,3 +1,6 @@
+import json
+import pathlib
+
 import pandas as pd
 import streamlit as st
 
@@ -34,6 +37,29 @@ st.dataframe(pd.DataFrame([{
 } for s in M.SERIES.values()]), hide_index=True, width="stretch", row_height=TABLE_ROW_PX,
    column_config={
     "Terms of use": st.column_config.TextColumn(width="large")})
+
+# --- Rates, liquidity and FX source audit (live, scripts/source_audit.py) ----------------
+AUDIT = pathlib.Path(__file__).resolve().parent.parent / "data" / "source_audit.json"
+st.markdown("**Source audit: rates, liquidity and FX.** Official public providers only, each "
+            "fetched live from the development machine by `scripts/source_audit.py` "
+            "(full raw first lines in `data/source_audit.md`).")
+try:
+    audit = json.loads(AUDIT.read_text(encoding="utf-8"))
+    st.caption(f"Audit run at {audit['run_at'].replace('T', ' ')}.")
+    st.dataframe(pd.DataFrame([{
+        "Series": r["name"], "Source": r["source"], "Works": "yes" if r.get("works") else "NO",
+        "Frequency": r["frequency"], "Earliest": r.get("earliest", "-"),
+        "Latest": r.get("latest", "-"), "Rows": r.get("rows"),
+        "Terms": ("TERMS UNVERIFIED. " if r["terms_unverified"] else "") + r["terms"],
+    } for r in audit["series"]]), hide_index=True, width="stretch", row_height=TABLE_ROW_PX,
+        column_config={"Terms": st.column_config.TextColumn(width="large"),
+                       "Rows": st.column_config.NumberColumn(format="%d")})
+    st.markdown("**Tried and not used:**")
+    st.dataframe(pd.DataFrame([{"Source": n["name"], "URL": n["url"], "Result": n["status"]}
+                               for n in audit["not_used"]]),
+                 hide_index=True, width="stretch", row_height=TABLE_ROW_PX)
+except (OSError, ValueError, KeyError) as e:
+    st.error(f"Source audit file not readable ({e}). Run scripts/source_audit.py.")
 
 df = read_assumptions()
 c1, c2 = st.columns([2, 3])

@@ -10,7 +10,7 @@ leak into another.
 import pytest
 import streamlit as st
 
-from data import markets, sonia
+from data import macro, markets, sonia
 
 
 def _no_network(*args, **kwargs):
@@ -37,4 +37,12 @@ def offline_markets(monkeypatch, tmp_path):
     monkeypatch.setattr(markets, "_get", _no_market_network)
     monkeypatch.setattr(markets, "_yahoo_history", _no_market_network)
     monkeypatch.setattr(markets, "CACHE_DIR", tmp_path / "cache" / "markets")
+    yield
+
+
+@pytest.fixture(autouse=True)
+def offline_macro(monkeypatch, tmp_path):
+    monkeypatch.setattr(macro, "fetch_live", _no_market_network)
+    monkeypatch.setattr(macro, "_get", _no_market_network)
+    monkeypatch.setattr(macro, "CACHE_DIR", tmp_path / "cache" / "macro")
     yield
