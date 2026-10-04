@@ -2,40 +2,17 @@
 versus Bank Rate. Official public sources only; every chart states units, frequency, source and
 as-of. Display analytics only: none of this feeds the financing engine."""
 
-from concurrent.futures import ThreadPoolExecutor
-
 import pandas as pd
 import streamlit as st
 
-import assumptions as A
 from analytics import series_stats as S
 from data import events as EV
-from data import macro as MAC
 from ui.common import explain
+from ui.macro_loader import get
 from ui.series_chart import BAND_MODES, section
 
 st.caption("Official central bank and treasury data for context. Statistics describe the data "
            "shown; none of this is a forecast or an input to the financing engine.")
-
-
-@st.cache_data(ttl=A.MARKETS_CACHE_TTL_HOURS * 3600, show_spinner="Fetching official data...")
-def load(key: str) -> MAC.MacroSeries:
-    return MAC.load_macro(key)  # MacroDataError propagates (not cached)
-
-
-def _try(k):
-    try:
-        return k, load(k), None
-    except MAC.MacroDataError as e:
-        return k, None, str(e)
-
-
-def get(keys: list[str]) -> tuple[dict, list[str]]:
-    """Load several series in parallel (each source is fetched independently)."""
-    with ThreadPoolExecutor(max_workers=6) as pool:
-        results = list(pool.map(_try, keys))
-    return ({k: s for k, s, _ in results if s is not None},
-            [e for _, _, e in results if e])
 
 
 RANGES = {"1Y": 12, "5Y": 60, "10Y": 120, "Max": None}

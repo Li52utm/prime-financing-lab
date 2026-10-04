@@ -23,6 +23,7 @@ PAGES = {
     "Assumptions": "views/assumptions_page.py",
     "Markets": "views/markets_page.py",
     "Rates & Liquidity": "views/rates_page.py",
+    "Desk Brief": "views/brief_page.py",
     "Glossary": "views/glossary_page.py",
     "Concept Trainer": "views/trainer_page.py",
 }
@@ -48,7 +49,7 @@ def chart_specs(at: AppTest) -> list[str]:
     return [el.proto.spec for el in at.get("plotly_chart")]
 
 
-NO_TICKET_PAGES = {"Markets", "Rates & Liquidity", "Glossary", "Concept Trainer"}  # no trade-context banner
+NO_TICKET_PAGES = {"Markets", "Rates & Liquidity", "Desk Brief", "Glossary", "Concept Trainer"}  # no trade-context banner
 
 
 @pytest.mark.parametrize("page", [p for p in PAGES if p not in NO_TICKET_PAGES])
@@ -526,3 +527,49 @@ def test_trainer_flashcards_and_quiz_score():
     assert at.error
     at.button(key="tr_reset").click().run()
     assert at.session_state.tr_done == 0
+
+
+# --- Phase 4: Desk Brief ----------------------------------------------------------------------
+
+def macro_open(page, monkeypatch=None, mode="live"):
+    if mode == "live":
+        monkeypatch.setattr(macro_mod, "fetch_live", synthetic_macro)
+    elif mode == "cached":
+        for key in macro_mod.SERIES:
+            if key not in ("brent", "gbpusd"):
+                macro_mod.write_cache(key, synthetic_macro(key), "2026-10-02T07:00:00")
+    return open_page(page)
+
+
+def test_brief_live_mode(monkeypatch):
+    at = macro_open("Desk Brief", monkeypatch, "live")
+    assert not at.exception, [e.value for e in at.exception]
+    assert not at.error
+    assert not [w for w in at.warning if "SONIA" not in w.value]  # sidebar ticket SONIA aside
+    assert "RULES-BASED, NOT A FORECAST" in at.info[0].value
+    md = " ".join(m.value for m in at.markdown)
+    assert "SONIA − Bank Rate stood at" in md and "change z" in md
+    assert [s.value for s in at.subheader][:3] == ["Funding conditions", "Largest movers",
+                                                    "Stretched: beyond 2 SD"]
+    assert len(at.get("download_button")) == 2
+
+
+def test_brief_printable_view(monkeypatch):
+    at = macro_open("Desk Brief", monkeypatch, "live")
+    at.toggle(key="db_print").set_value(True).run()
+    assert not at.exception
+    assert [s.value for s in at.subheader] == ["SONIA"]  # sidebar only: compact view
+    assert any("Printable view" in c.value for c in at.caption)
+
+
+def test_brief_cached_mode():
+    at = macro_open("Desk Brief", mode="cached")
+    assert not at.exception, [e.value for e in at.exception]
+    assert any("cached copy used" in w.value and "2026-10-02 07:00" in w.value for w in at.warning)
+    assert any("Not available" in e.label for e in at.expander)  # Brent and GBP/USD
+
+
+def test_brief_error_mode():
+    at = macro_open("Desk Brief", mode="error")
+    assert not at.exception, [e.value for e in at.exception]
+    assert at.error and "No series could be loaded" in at.error[0].value

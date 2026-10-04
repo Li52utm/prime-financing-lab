@@ -347,3 +347,14 @@ MARKETS_CACHE_TTL_HOURS = 6  # in-app cache lifetime for fetched series
 MARKETS_RANGES_MONTHS = {"1M": 1, "6M": 6, "1Y": 12, "5Y": 60, "10Y": 120, "Max": None}  # presets
 MARKETS_DEFAULT_RANGE = "1Y"  # own assumption: range shown on first load
 MARKETS_RSI_LEVELS = (30, 70)  # conventional oversold / overbought guides on the RSI panel
+
+
+# =============================================================================
+# Desk Brief (rules-based readout; display only, not a forecast)
+# =============================================================================
+
+BRIEF_STRETCH_Z = 2.0  # user specification: a level or change beyond 2 SD is "stretched"
+BRIEF_TOP_MOVERS = 5  # own assumption: how many largest movers the brief lists
+BRIEF_COMPARE_DAYS = 30  # own assumption: funding-condition changes compare with ~1 month earlier
+BRIEF_LOOKBACK_MONTHS = {"1Y": 12, "5Y": 60, "10Y": 120, "Max": None}  # history windows offered
+BRIEF_DEFAULT_LOOKBACK = "5Y"  # own assumption: history used for z-scores and percentiles
