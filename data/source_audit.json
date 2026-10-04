@@ -1,5 +1,5 @@
 {
- "run_at": "2026-10-04T11:37:44",
+ "run_at": "2026-10-04T17:24:25",
  "series": [
   {
    "key": "ea_aaa_2y",
@@ -41,7 +41,7 @@
    "latest": "2026-10-01",
    "first_value": 4.20921992630835,
    "last_value": 3.5921733451,
-   "seconds": 32.4,
+   "seconds": 0.4,
    "url": "https://data-api.ecb.europa.eu/service/data/YC/B.U2.EUR.4F.G_N_A.SV_C_YM.SR_10Y?format=csvdata&detail=dataonly",
    "raw_first_lines": [
     "KEY,FREQ,REF_AREA,CURRENCY,PROVIDER_FM,INSTRUMENT_FM,PROVIDER_FM_ID,DATA_TYPE_FM,TIME_PERIOD,OBS_VALUE",
@@ -113,7 +113,7 @@
    "latest": "2026-10-01",
    "first_value": 973.0,
    "last_value": 1956438.6057117,
-   "seconds": 0.4,
+   "seconds": 0.3,
    "url": "https://data-api.ecb.europa.eu/service/data/ILM/D.U2.C.L020200.U2.EUR?format=csvdata&detail=dataonly",
    "raw_first_lines": [
     "KEY,FREQ,REF_AREA,BS_REP_SECTOR,BS_ITEM,COUNT_AREA,CURRENCY_TRANS,TIME_PERIOD,OBS_VALUE",
@@ -137,7 +137,7 @@
    "latest": "2026-10-01",
    "first_value": 84438.0,
    "last_value": 340697.60062922,
-   "seconds": 0.4,
+   "seconds": 0.2,
    "url": "https://data-api.ecb.europa.eu/service/data/ILM/D.U2.C.L020100.U2.EUR?format=csvdata&detail=dataonly",
    "raw_first_lines": [
     "KEY,FREQ,REF_AREA,BS_REP_SECTOR,BS_ITEM,COUNT_AREA,CURRENCY_TRANS,TIME_PERIOD,OBS_VALUE",
@@ -161,7 +161,7 @@
    "latest": "2026-10-01",
    "first_value": 6372.0,
    "last_value": 0.0,
-   "seconds": 0.4,
+   "seconds": 66.5,
    "url": "https://data-api.ecb.europa.eu/service/data/ILM/D.U2.C.A050500.U2.EUR?format=csvdata&detail=dataonly",
    "raw_first_lines": [
     "KEY,FREQ,REF_AREA,BS_REP_SECTOR,BS_ITEM,COUNT_AREA,CURRENCY_TRANS,TIME_PERIOD,OBS_VALUE",
@@ -185,7 +185,7 @@
    "latest": "2026-10-01",
    "first_value": 162940.0,
    "last_value": 176125.0,
-   "seconds": 0.3,
+   "seconds": 32.6,
    "url": "https://data-api.ecb.europa.eu/service/data/ILM/D.U2.C.MRR.U2.EUR?format=csvdata&detail=dataonly",
    "raw_first_lines": [
     "KEY,FREQ,REF_AREA,BS_REP_SECTOR,BS_ITEM,COUNT_AREA,CURRENCY_TRANS,TIME_PERIOD,OBS_VALUE",
@@ -209,7 +209,7 @@
    "latest": "2026-08-01",
    "first_value": 7.63,
    "last_value": 3.185,
-   "seconds": 32.3,
+   "seconds": 0.1,
    "url": "https://data-api.ecb.europa.eu/service/data/IRS/M.DE.L.L40.CI.0000.EUR.N.Z?format=csvdata&detail=dataonly",
    "raw_first_lines": [
     "KEY,FREQ,REF_AREA,IR_TYPE,TR_TYPE,MATURITY_CAT,BS_COUNT_SECTOR,CURRENCY_TRANS,IR_BUS_COV,IR_FV_TYPE,TIME_PERIOD,OBS_VALUE",
@@ -257,7 +257,7 @@
    "latest": "2026-08-01",
    "first_value": 13.767,
    "last_value": 3.986,
-   "seconds": 0.2,
+   "seconds": 0.3,
    "url": "https://data-api.ecb.europa.eu/service/data/IRS/M.IT.L.L40.CI.0000.EUR.N.Z?format=csvdata&detail=dataonly",
    "raw_first_lines": [
     "KEY,FREQ,REF_AREA,IR_TYPE,TR_TYPE,MATURITY_CAT,BS_COUNT_SECTOR,CURRENCY_TRANS,IR_BUS_COV,IR_FV_TYPE,TIME_PERIOD,OBS_VALUE",
@@ -281,7 +281,7 @@
    "latest": "2026-10-02",
    "first_value": 1.1789,
    "last_value": 1.1225,
-   "seconds": 0.3,
+   "seconds": 32.3,
    "url": "https://data-api.ecb.europa.eu/service/data/EXR/D.USD.EUR.SP00.A?format=csvdata&detail=dataonly",
    "raw_first_lines": [
     "KEY,FREQ,CURRENCY,CURRENCY_DENOM,EXR_TYPE,EXR_SUFFIX,TIME_PERIOD,OBS_VALUE",
@@ -305,7 +305,7 @@
    "latest": "2026-10-01",
    "first_value": 11.5,
    "last_value": 3.75,
-   "seconds": 1.9,
+   "seconds": 1.3,
    "url": "https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/1963&Dateto=now&SeriesCodes=IUDBEDR&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N",
    "raw_first_lines": [
     "DATE,IUDBEDR",
@@ -329,7 +329,7 @@
    "latest": "2026-09-30",
    "first_value": 5.94,
    "last_value": 3.7329,
-   "seconds": 0.9,
+   "seconds": 0.8,
    "url": "https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/1963&Dateto=now&SeriesCodes=IUDSOIA&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N",
    "raw_first_lines": [
     "DATE,IUDSOIA",
@@ -353,7 +353,7 @@
    "latest": "2026-09-30",
    "first_value": 6.1628,
    "last_value": 4.9224,
-   "seconds": 1.2,
+   "seconds": 1.0,
    "url": "https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/1963&Dateto=now&SeriesCodes=IUDSNPY&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N",
    "raw_first_lines": [
     "DATE,IUDSNPY",
@@ -401,7 +401,7 @@
    "latest": "2026-09-30",
    "first_value": 4.8078,
    "last_value": 5.7327,
-   "seconds": 0.9,
+   "seconds": 0.8,
    "url": "https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/1963&Dateto=now&SeriesCodes=IUDLNPY&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N",
    "raw_first_lines": [
     "DATE,IUDLNPY",
@@ -473,7 +473,7 @@
    "latest": "2026-10-01",
    "first_value": 3.9,
    "last_value": 3.21,
-   "seconds": 0.9,
+   "seconds": 0.8,
    "url": "https://api.statistiken.bundesbank.de/rest/data/BBSIS/D.I.ZST.ZI.EUR.S1311.B.A604.R02XX.R.A.A._Z._Z.A?format=csv&lang=en",
    "raw_first_lines": [
     "\"\",BBSIS.D.I.ZST.ZI.EUR.S1311.B.A604.R02XX.R.A.A._Z._Z.A,BBSIS.D.I.ZST.ZI.EUR.S1311.B.A604.R02XX.R.A.A._Z._Z.A_FLAGS",
@@ -497,7 +497,7 @@
    "latest": "2026-10-01",
    "first_value": 5.95,
    "last_value": 3.66,
-   "seconds": 0.9,
+   "seconds": 0.2,
    "url": "https://api.statistiken.bundesbank.de/rest/data/BBSIS/D.I.ZST.ZI.EUR.S1311.B.A604.R10XX.R.A.A._Z._Z.A?format=csv&lang=en",
    "raw_first_lines": [
     "\"\",BBSIS.D.I.ZST.ZI.EUR.S1311.B.A604.R10XX.R.A.A._Z._Z.A,BBSIS.D.I.ZST.ZI.EUR.S1311.B.A604.R10XX.R.A.A._Z._Z.A_FLAGS",
@@ -521,12 +521,12 @@
    "latest": "2026-10-02",
    "first_value": 7.87,
    "last_value": 4.83,
-   "seconds": 17.5,
-   "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/1990/all?type=daily_treasury_yield_curve&field_tdr_date_value=1990&page&_format=csv",
+   "seconds": 0.8,
+   "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2025/all?type=daily_treasury_yield_curve&field_tdr_date_value=2025&page&_format=csv",
    "raw_first_lines": [
-    "Date,\"3 Mo\",\"6 Mo\",\"1 Yr\",\"2 Yr\",\"3 Yr\",\"5 Yr\",\"7 Yr\",\"10 Yr\",\"30 Yr\"",
-    "12/31/1990,6.63,6.73,6.82,7.15,7.40,7.68,8.00,8.08,8.26",
-    "12/28/1990,6.64,6.85,6.91,7.25,7.48,7.78,8.08,8.14,8.31"
+    "Date,\"1 Mo\",\"1.5 Month\",\"2 Mo\",\"3 Mo\",\"4 Mo\",\"6 Mo\",\"1 Yr\",\"2 Yr\",\"3 Yr\",\"5 Yr\",\"7 Yr\",\"10 Yr\",\"20 Yr\",\"30 Yr\"",
+    "12/31/2025,3.74,3.75,3.67,3.67,3.63,3.59,3.48,3.47,3.55,3.73,3.94,4.18,4.79,4.84",
+    "12/30/2025,3.65,3.71,3.65,3.65,3.63,3.59,3.47,3.45,3.50,3.68,3.89,4.14,4.76,4.81"
    ]
   },
   {
@@ -545,12 +545,12 @@
    "latest": "2026-10-02",
    "first_value": 7.94,
    "last_value": 5.28,
-   "seconds": 13.5,
-   "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/1990/all?type=daily_treasury_yield_curve&field_tdr_date_value=1990&page&_format=csv",
+   "seconds": 0.9,
+   "url": "https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2025/all?type=daily_treasury_yield_curve&field_tdr_date_value=2025&page&_format=csv",
    "raw_first_lines": [
-    "Date,\"3 Mo\",\"6 Mo\",\"1 Yr\",\"2 Yr\",\"3 Yr\",\"5 Yr\",\"7 Yr\",\"10 Yr\",\"30 Yr\"",
-    "12/31/1990,6.63,6.73,6.82,7.15,7.40,7.68,8.00,8.08,8.26",
-    "12/28/1990,6.64,6.85,6.91,7.25,7.48,7.78,8.08,8.14,8.31"
+    "Date,\"1 Mo\",\"1.5 Month\",\"2 Mo\",\"3 Mo\",\"4 Mo\",\"6 Mo\",\"1 Yr\",\"2 Yr\",\"3 Yr\",\"5 Yr\",\"7 Yr\",\"10 Yr\",\"20 Yr\",\"30 Yr\"",
+    "12/31/2025,3.74,3.75,3.67,3.67,3.63,3.59,3.48,3.47,3.55,3.73,3.94,4.18,4.79,4.84",
+    "12/30/2025,3.65,3.71,3.65,3.65,3.63,3.59,3.47,3.45,3.50,3.68,3.89,4.14,4.76,4.81"
    ]
   },
   {
@@ -569,7 +569,7 @@
    "latest": "2026-09-29",
    "first_value": 18.63,
    "last_value": 113.96,
-   "seconds": 10.4,
+   "seconds": 10.5,
    "url": "https://www.eia.gov/dnav/pet/hist_xls/RBRTEd.xls",
    "raw_first_lines": [
     "<binary 452096 bytes: d0cf11e0a1b11ae1>"
@@ -591,7 +591,7 @@
    "latest": "2026-10-01",
    "first_value": 2.3359,
    "last_value": 1.3212,
-   "seconds": 1.4,
+   "seconds": 1.6,
    "url": "https://www.bankofengland.co.uk/boeapps/database/_iadb-fromshowcolumns.asp?csv.x=yes&Datefrom=01/Jan/1963&Dateto=now&SeriesCodes=XUDLUSS&CSVF=TN&UsingCodes=Y&VPD=Y&VFD=N",
    "raw_first_lines": [
     "DATE,XUDLUSS",
@@ -619,7 +619,7 @@
    "name": "Stooq FTSE 100 (^ukx)",
    "url": "https://stooq.com/q/d/l/?s=%5Eukx&i=d",
    "status": "responded, but not data (bot challenge / HTML)",
-   "seconds": 0.1,
+   "seconds": 0.2,
    "kind": "stooq"
   }
  ]

@@ -95,7 +95,16 @@ It opens at http://localhost:8501. The sidebar holds the trade ticket, with an A
 | Desk view | Dealer P&L by component, RoLE and RoRWA against hurdles, quoted vs required spread, TRS return vs IM remuneration, and three netting cases |
 | Capital | NOT MODELLED banner, RWA and leverage by component, T-accounts, gilt source comparison, PB RWA vs margin, SA-CCR detail |
 | Stress lab | Hypothetical presets under three horizon views, the price shock, the repricing lag, term vs rolling |
-| Assumptions | Every value in `assumptions.py`, read live, with its source and a VERIFIED / UNVERIFIED tag (n/a for own assumptions and hypothetical values) |
+| Replay history | The TRS run day by day through the capital engine on real FTSE 100 / S&P 500 history (presets: March 2020, 2022, 2008, or custom); empirical 10-day haircut check; EWMA volatility-implied IM against the static ticket IM |
+| Markets | Public market data with indicators, plus a correlation matrix, rolling correlation and beta, volatility regimes, return distribution with tails, and seasonality by month |
+| Rates & Liquidity | 2s10s slopes, France/Italy minus Germany 10y spreads (monthly), euro excess liquidity, BoE reserves vs APF gilts, SONIA minus Bank Rate; stats strip, SD bands and dated policy events with official sources |
+| Desk Brief | A rules-based readout of the official series: levels, changes, z-scores, percentiles, largest movers, funding conditions. Labelled "rules-based, not a forecast"; CSV and printable export |
+| Bring your own data | A user-supplied CSV through the same stats strip, bands and brief rules, plus a spread builder. Session memory only |
+| Forecast Lab | EXPERIMENTAL. Displays the saved results of an offline walk-forward test of simple models against naive baselines |
+| Glossary / Concept Trainer | 34 hand-written terms linked to the charts where they appear; flashcards and a quiz (score kept in the session only) |
+| Assumptions | Data sources (every source with URL, frequency, earliest date, terms and status; dropped charts), then every value in `assumptions.py`, read live, with its source and a VERIFIED / UNVERIFIED tag (n/a for own assumptions and hypothetical values) |
+
+Pages are grouped in the top bar: Financing, Market data, Learn, Reference.
 
 Every page carries a banner saying the default spreads and k are placeholder assumptions, not market levels. Every chart carries the subtitle "Illustrative, not a regulatory calculation". Every headline number has a "How is this calculated" expander.
 
@@ -150,6 +159,30 @@ The Markets page shows public market data for context. It is display analytics o
   - Ranges above 1,500 daily bars plot weekly bars and week-end indicator values. The indicator maths always runs on daily data.
 - **Bollinger breaches** are marked on the chart (▼ above the upper band, ▲ below the lower). A table shows how often closes fall outside the bands and the average move over the next 5 and 20 days, next to the all-days average. Bands describe range, not direction.
 
+## Official rates, liquidity and FX data
+
+Rates & Liquidity and the Desk Brief use official public providers only, fetched live and then cached in `data/cache/macro/` (git-ignored). Load order: live, cache, error shown on the page. `scripts/source_audit.py` fetches every series, records the raw first lines, earliest date and frequency, and writes `data/source_audit.json` and `data/source_audit.md`. The full table (URL, frequency, earliest date, terms, status) is on the Assumptions page under **Data sources**.
+
+| Provider | Series | Frequency | Earliest |
+|---|---|---|---|
+| ECB Data Portal | Euro area AAA 2y and 10y yields | daily | 2004-09-06 |
+| ECB Data Portal | €STR | daily | 2019-10-01 |
+| ECB Data Portal | Excess liquidity (official), minimum reserves | daily | 2024-09-27 |
+| ECB Data Portal | Deposit facility, current accounts, marginal lending | daily | 1998-12-31 |
+| ECB Data Portal | Germany, France, Italy 10y (long-term convergence rates) | **monthly** | 1986 to 1991 |
+| ECB Data Portal | EUR/USD reference rate | daily | 1999-01-04 |
+| Bank of England | Bank Rate, SONIA, 5y/10y/20y gilt par yields, GBP/USD | daily | 1975 to 2000 |
+| Bank of England | Reserve balances; APF gilt holdings (purchase proceeds) | **weekly** | 2006-05-24; 2009-03-12 |
+| Deutsche Bundesbank | Germany 2y and 10y (Svensson) | daily | 1997-08-07 |
+| US Treasury | 2y and 10y par yields (terms unverified) | daily | 1990-01-02 |
+| EIA | Brent spot | daily | 1987-05-20 |
+
+Not used: FRED (no response from the development machine; US Treasury used instead) and Stooq (bot challenge). Dated policy events (Fed, BoE, ECB) are shown only if `scripts/verify_events.py` fetched the page and found the date and an expected phrase.
+
+**Dropped or not built** (no free official data; nothing substituted): UK 2s10s (no BoE 2y nominal yield); France and Italy 2s10s (no free official 2y); euro policy rate versus €STR (deposit-rate series not audited). The France-Germany and Italy-Germany spreads are monthly. Official euro excess liquidity starts on 27 Sep 2024; the longer line is DF + CA − MLF, labelled as not excess liquidity.
+
+**Statistics** are at each series' own frequency: no daily statistic is computed for weekly or monthly data. Spreads use only dates where both inputs exist (no filling or interpolation).
+
 ## Bring your own data (local use)
 
 The "Bring your own data" page (Market data menu) runs a CSV you supply through the same stats strip, mean ±1/±2 SD bands, z-scores and Desk Brief rules as the official series, and builds spreads (A minus B, optionally ×100 to turn % into bp).
@@ -159,6 +192,39 @@ The "Bring your own data" page (Market data menu) runs a CSV you supply through 
 - **Format:** one date column and one or more value columns, comma, semicolon, tab or pipe separated, UTF-8 (with or without BOM). Pick the date format (ISO, DD/MM/YYYY, MM/DD/YYYY, auto, or Excel serial numbers). Thousands separators and a trailing % are stripped.
 - **Nothing is filled.** Rows whose date or value does not parse are dropped and counted; for repeated dates the last row is kept. Frequency (daily, weekly or monthly) is inferred from the median gap between dates or chosen by you; other spacings are rejected, never resampled.
 - Everything on the page is labelled USER-SUPPLIED. The brief rules are descriptive and are not a forecast.
+
+## Forecast Lab (EXPERIMENTAL)
+
+The Forecast Lab page only displays results. Models are fitted offline by a script, which writes `data/forecasts/` (git-ignored; regenerate it at any time):
+
+```
+.venv\Scripts\python scripts\run_forecasts.py
+```
+
+It takes about 20 seconds and uses live data, or the cache if a live fetch fails. GARCH needs the optional `arch` package (`pip install arch`, listed in requirements.txt). Without it the script runs the other models and the page says GARCH was not run.
+
+- **Series:** FTSE 100 and S&P 500 (Yahoo Finance, not an official provider) and GBP/USD (Bank of England), daily from 1990. The first forecast comes after 1,260 days.
+- **Targets and models:**
+  - next-10-day volatility: naive (last 10 days), EWMA (λ 0.94), GARCH(1,1);
+  - next-day and next-5-day return: naive (zero), historical drift, ridge;
+  - direction: naive (always up), drift sign, logistic.
+
+  Features are lagged returns, the 5-day return, 20-day realised vol and EWMA vol.
+- **Rules:**
+  - Walk-forward on an expanding window. Ridge, logistic and drift refit every 21 days; GARCH every 252.
+  - A training row is used only once its whole target is observed (asserted in the script and tested).
+  - Every setting was fixed in `assumptions.py` (`FORECAST_*`) before the first run and was not tuned on the test period.
+- **Verdicts:** the mean loss difference against naive gets a moving-block bootstrap 95% interval. The model "beats naive" if the whole interval is below zero and "does not beat naive" if it is wholly above zero; otherwise the result is "inconclusive". The page headline counts the verdicts.
+- **Equity curves:** next-day rules, long or flat, net of 5 bp per position change, against buy and hold. Price index only (no dividends), cash earns nothing, FX has no carry. Results come from one historical path.
+- **Run on 2026-10-04:** 11 of 36 comparisons "beat naive", all of them volatility models (EWMA and GARCH). 2 did not beat naive (GBP/USD drift returns). The other 23 were inconclusive, which covers every return and direction model. This describes past data only. It makes no claim about future results.
+
+## Limitations
+
+- Regulatory numbers (RWA, SA-CCR-style add-ons, leverage) are illustrative and simplified. Stress presets are hypothetical.
+- FTSE 100 and S&P 500 come from Yahoo Finance (personal-use terms; not an official provider). US Treasury terms are unverified.
+- The Desk Brief, the Markets statistics and the Forecast Lab are descriptive. None of them feeds the financing engine, and none is a forecast.
+- Volatility-regime thresholds use each series' full history (look-ahead; descriptive only). Seasonality samples are small and are flagged.
+- The Replay uses a static notional, close-to-close VM with no threshold or lag, static ticket IM and no street-leg remargining.
 
 ## Running the tests
 

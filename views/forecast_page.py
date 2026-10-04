@@ -9,7 +9,7 @@ import streamlit as st
 
 import assumptions as A
 from data import forecast_store as FS
-from ui.common import explain, show, style, table
+from ui.common import TABLE_ROW_PX, explain, show, style, table
 from ui.series_chart import LINE_COLORS, LINE_DASHES, NEWLINE
 
 LABEL = "EXPERIMENTAL"
@@ -63,19 +63,24 @@ sub = results[results["series"] == pick]
 rows = []
 for r in sub.to_dict("records"):
     mult, unit = DISPLAY[r["metric"]]
-    rows.append({"Target": r["target"], "Model": r["model"], "Metric": r["metric"], "Obs": r["n"],
+    # verdict next to the model so it is visible at laptop width; unit and obs last
+    rows.append({"Target": r["target"], "Model": r["model"], "Metric": r["metric"],
+                 "Verdict": r["verdict"] + ("*" if r.get("note") else ""),
                  "Diff vs naive": r["diff_mean"] * mult,
                  f"{A.FORECAST_CONFIDENCE:.0%} low": r["ci_lo"] * mult,
                  f"{A.FORECAST_CONFIDENCE:.0%} high": r["ci_hi"] * mult, "Unit": unit,
-                 "Verdict": r["verdict"] + (" (same calls as naive)" if r.get("note") else "")})
+                 "Obs": r["n"]})
 table(pd.DataFrame(rows), {"Obs": "int", "Diff vs naive": "num2",
                            f"{A.FORECAST_CONFIDENCE:.0%} low": "num2",
-                           f"{A.FORECAST_CONFIDENCE:.0%} high": "num2"})
+                           f"{A.FORECAST_CONFIDENCE:.0%} high": "num2"},
+      height=(len(rows) + 1) * TABLE_ROW_PX + 3)  # every row visible, no inner scroll
 counts = sub["verdict"].value_counts()
 st.markdown(f"For {pick}: {counts.get('beats naive', 0)} of {len(sub)} comparisons \"beats naive\", "
             f"{counts.get('does not beat naive', 0)} \"does not beat naive\", "
             f"{counts.get('inconclusive', 0)} \"inconclusive\".")
-st.caption(f"Diff = mean of (model loss − naive loss) over the test dates; negative means lower "
+st.caption((r"\* Same calls as naive on every test date (the drift was positive throughout), "
+            "so there is nothing to compare. " if sub["note"].astype(bool).any() else "")
+           + f"Diff = mean of (model loss − naive loss) over the test dates; negative means lower "
            f"loss than naive. Interval: moving-block bootstrap ({A.FORECAST_BOOT_BLOCK}-day blocks, "
            f"{A.FORECAST_BOOT_N:,} replicates). Verdict: \"beats naive\" if the whole interval is "
            "below 0, \"does not beat naive\" if it is wholly above 0, otherwise inconclusive. "

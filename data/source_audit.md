@@ -1,6 +1,6 @@
 # Source audit
 
-Run live from the development machine at 2026-10-04T11:37:44 by `scripts/source_audit.py`. Official public providers only.
+Run live from the development machine at 2026-10-04T17:24:25 by `scripts/source_audit.py`. Official public providers only.
 
 | Series | Source | Works | Frequency | Earliest | Latest | Rows | Terms |
 |---|---|---|---|---|---|---|---|
@@ -294,26 +294,26 @@ Comment (in english),,
 
 ### US Treasury 2y par yield
 
-- URL: https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/1990/all?type=daily_treasury_yield_curve&field_tdr_date_value=1990&page&_format=csv
+- URL: https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2025/all?type=daily_treasury_yield_curve&field_tdr_date_value=2025&page&_format=csv
 - Parsed: 9195 observations, 1990-01-02 = 7.87 ... 2026-10-02 = 4.83 (%)
 - Raw first lines:
 
 ```
-Date,"3 Mo","6 Mo","1 Yr","2 Yr","3 Yr","5 Yr","7 Yr","10 Yr","30 Yr"
-12/31/1990,6.63,6.73,6.82,7.15,7.40,7.68,8.00,8.08,8.26
-12/28/1990,6.64,6.85,6.91,7.25,7.48,7.78,8.08,8.14,8.31
+Date,"1 Mo","1.5 Month","2 Mo","3 Mo","4 Mo","6 Mo","1 Yr","2 Yr","3 Yr","5 Yr","7 Yr","10 Yr","20 Yr","30 Yr"
+12/31/2025,3.74,3.75,3.67,3.67,3.63,3.59,3.48,3.47,3.55,3.73,3.94,4.18,4.79,4.84
+12/30/2025,3.65,3.71,3.65,3.65,3.63,3.59,3.47,3.45,3.50,3.68,3.89,4.14,4.76,4.81
 ```
 
 ### US Treasury 10y par yield
 
-- URL: https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/1990/all?type=daily_treasury_yield_curve&field_tdr_date_value=1990&page&_format=csv
+- URL: https://home.treasury.gov/resource-center/data-chart-center/interest-rates/daily-treasury-rates.csv/2025/all?type=daily_treasury_yield_curve&field_tdr_date_value=2025&page&_format=csv
 - Parsed: 9195 observations, 1990-01-02 = 7.94 ... 2026-10-02 = 5.28 (%)
 - Raw first lines:
 
 ```
-Date,"3 Mo","6 Mo","1 Yr","2 Yr","3 Yr","5 Yr","7 Yr","10 Yr","30 Yr"
-12/31/1990,6.63,6.73,6.82,7.15,7.40,7.68,8.00,8.08,8.26
-12/28/1990,6.64,6.85,6.91,7.25,7.48,7.78,8.08,8.14,8.31
+Date,"1 Mo","1.5 Month","2 Mo","3 Mo","4 Mo","6 Mo","1 Yr","2 Yr","3 Yr","5 Yr","7 Yr","10 Yr","20 Yr","30 Yr"
+12/31/2025,3.74,3.75,3.67,3.67,3.63,3.59,3.48,3.47,3.55,3.73,3.94,4.18,4.79,4.84
+12/30/2025,3.65,3.71,3.65,3.65,3.63,3.59,3.47,3.45,3.50,3.68,3.89,4.14,4.76,4.81
 ```
 
 ### Brent crude (spot, FOB)

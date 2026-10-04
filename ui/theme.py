@@ -87,6 +87,9 @@ CSS = f"""
   border: 1px solid var(--pfl-line); padding: 0.6rem 0.95rem !important; }}
 [data-testid="stAlertContainer"] p {{ font-size: 15px; }}
 [data-testid="stPlotlyChart"] {{ border: 1px solid var(--pfl-line); }}
+/* Quality pass: inline code at readable size; multiselect tags dark text on the green tag */
+[data-testid="stMarkdownContainer"] code {{ font-size: 14px !important; }}
+[data-tag], [data-tag] * {{ color: #0b0c0b !important; }}
 </style>
 """
 

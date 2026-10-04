@@ -182,7 +182,9 @@ fig.add_trace(go.Scatter(x=pdd.index, y=dd_y, name="Drawdown", mode="lines", sho
                          fill="tozeroy", fillcolor=MKT["dd_fill"]),
               row=row["dd"], col=1)
 
-style(fig, f"{spec.name}: level, bands and risk ({rng})", height=1120)
+style(fig, f"{spec.name}: level, bands and risk ({rng})", height=1120,
+      subtitle=f"{'Weekly bars (indicators computed daily)' if weekly else 'Daily'} · "
+               f"{spec.source} · as of {series.as_of:%d %b %Y}")
 fig.update_layout(xaxis_rangeslider_visible=False, hovermode="x unified")
 fig.update_yaxes(range=[0, 100], row=row["rsi"], col=1)
 if log_axis and not y:

@@ -50,6 +50,11 @@ def read_assumptions(path: pathlib.Path = PATH) -> pd.DataFrame:
     source = path.read_text(encoding="utf-8")
     lines = source.splitlines()
     marker = next((i + 1 for i, l in enumerate(lines) if _HYPOTHETICAL_MARKER in l), None)
+    # The stress section ends at the next "# ====" section ruler after its own header block,
+    # so later sections (Desk Brief, Replay, Forecast Lab...) are not tagged hypothetical.
+    end = next((i + 1 for i, l in enumerate(lines)
+                if marker is not None and i + 1 > marker + 2 and l.startswith("# ====")),
+               len(lines) + 1)
     rows = []
     for node in ast.parse(source).body:
         if not isinstance(node, ast.Assign) or not isinstance(node.targets[0], ast.Name):
@@ -60,7 +65,8 @@ def read_assumptions(path: pathlib.Path = PATH) -> pd.DataFrame:
         value = ast.get_source_segment(source, node.value) or ""
         value = "\n".join(line.split("#", 1)[0] for line in value.splitlines())  # drop comments
         value = re.sub(r"\s+", " ", value).replace("{ ", "{").replace(", }", "}")
-        hypothetical = marker is not None and node.lineno > marker and name != "MONTH_DAYS"
+        hypothetical = (marker is not None and marker < node.lineno < end
+                        and name != "MONTH_DAYS")
         kind, status = _type_and_status(comment, hypothetical and "own assumption" not in
                                         comment.lower())
         rows.append({"Name": name, "Value": value if len(value) <= 120 else value[:117] + "...",

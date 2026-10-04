@@ -172,6 +172,11 @@ def test_assumptions_reader_tags():
     assert d.loc["STRESS_PRESETS", "Type"] == "Hypothetical"
     assert d.loc["SDRT_RATE", "Status"] == "UNVERIFIED"
     assert (d["Source / comment"].str.strip() != "").all()  # every default has a comment
+    # only the stress section is hypothetical; later sections keep their own tags
+    hyp = set(d.index[d["Type"] == "Hypothetical"])
+    assert {"STRESS_PRESETS", "PRICE_SHOCK_GRID"} <= hyp
+    for name in ("BRIEF_STRETCH_Z", "FORECAST_VOL_HORIZON", "BYOD_MAX_LINES", "REPLAY_PRESETS"):
+        assert d.loc[name, "Type"] != "Hypothetical", name
 
 
 # --- Summary: Spread vs k heatmaps ------------------------------------------------------------
@@ -377,7 +382,8 @@ def test_markets_live_mode(monkeypatch):
     names = [tr.get("name") for tr in spec["data"]]
     for n in ("MA 50", "MA 200", "Close above upper band", "Close below lower band"):
         assert n in names
-    assert spec["layout"]["title"]["subtitle"]["text"] == SUBTITLE
+    assert spec["layout"]["title"]["subtitle"]["text"] == (
+        "Daily · Yahoo Finance via yfinance (^FTSE) · as of 02 Oct 2026")
     assert "Bands describe range, not direction." in markets_text(at)
     assert not at.error
     # the only warning is the sidebar's offline SONIA notice, not a Markets cache warning
@@ -618,7 +624,8 @@ def test_markets_upgrades_live(monkeypatch):
     else:
         z = np.array(heat, dtype=float)
     assert z.shape == (6, 6) and np.allclose(np.diag(z), 1) and np.allclose(z, z.T, equal_nan=True)
-    # every new chart carries frequency, source and as-of (or date span) in its subtitle
+    # every chart carries frequency, source and as-of (or date span) in its subtitle
+    assert specs[0]["layout"]["title"]["subtitle"]["text"].startswith("Daily · Yahoo")
     for sp in specs[1:]:
         sub_ = sp["layout"]["title"]["subtitle"]["text"]
         assert sub_.startswith(("Daily · ", "Monthly ")), sub_
@@ -829,7 +836,7 @@ def test_forecast_lab_shows_saved_results(monkeypatch):
         assert sp["layout"]["title"]["subtitle"]["text"].startswith("EXPERIMENTAL · Daily")
     assert "NET OF 5 BP" in specs[1]["layout"]["title"]["text"]
     verdicts = at.dataframe[0].value["Verdict"].tolist()
-    assert len(verdicts) == 10 and all(v.split(" (")[0] in ("beats naive", "does not beat naive",
+    assert len(verdicts) == 10 and all(v.rstrip("*") in ("beats naive", "does not beat naive",
                                                            "inconclusive") for v in verdicts)
     at.selectbox(key="fl_series").set_value("GBP/USD")
     at.radio(key="fl_range").set_value("Max").run()
@@ -856,3 +863,34 @@ def test_forecast_page_never_fits():
     for needle in ("import arch", "from arch", "analytics.forecast", "fit_", "walk_forward",
                    "garch_forecasts"):
         assert needle not in src, needle
+
+
+# --- Phase 9: Data Sources on the Assumptions page --------------------------------------------
+
+def test_assumptions_page_data_sources_section():
+    at = open_page("Assumptions")
+    assert not at.exception, [e.value for e in at.exception]
+    assert "Data sources" in [s.value for s in at.subheader]
+    src = at.dataframe[0].value
+    assert list(src.columns) == ["Series", "Frequency", "Earliest", "Status", "Used on",
+                                 "Provider", "URL", "Terms"]
+    assert len(src) == 32 and "User-supplied CSV" in src["Series"].tolist()
+    assert at.dataframe[1].value["Source"].str.contains("Stooq").any()  # tried and not used
+    md = " ".join(m.value for m in at.markdown)
+    assert "UK 2s10s" in md and "MONTHLY" in md  # dropped charts listed
+
+
+def test_markets_upgrades_cached_and_partial(monkeypatch):
+    """Cached mode: every upgrade section renders from the cache with cached stamps. With one
+    series missing (no live, no cache) the correlation matrix drops it rather than failing."""
+    for key in markets_mod.SERIES:
+        if key != "brent":
+            markets_mod.write_cache(key, synthetic_varied(key), "2026-10-01T08:30:00")
+    at = open_page("Markets")
+    assert not at.exception, [e.value for e in at.exception]
+    subs = [s.value for s in at.subheader]
+    for s in MARKET_SECTIONS:
+        assert s in subs
+    assert any("cached copy fetched 2026-10-01 08:30" in w.value for w in at.warning)
+    assert any("Left out of the cross-asset sections" in w.value and "Brent" in w.value
+               for w in at.warning)

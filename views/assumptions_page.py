@@ -1,11 +1,6 @@
-import json
-import pathlib
-
-import pandas as pd
 import streamlit as st
 
-from data import markets as M
-
+from data import sources as SRC
 from ui.assumptions_reader import PATH, read_assumptions
 from ui.common import TABLE_ROW_PX, page_header
 from ui.ticket import get_ctx
@@ -28,39 +23,38 @@ st.info(
     + ("; manual override in use." if ctx.sonia_overridden else "."),
     )
 
-st.markdown("**Market data sources (Markets page).** Each was fetched and checked before use on "
-            "2026-10-03. FRED (no response from the development network) and Stooq (bot "
-            "challenge instead of data) are not used.")
-st.dataframe(pd.DataFrame([{
-    "Series": s.name, "Source": s.source, "Code": s.code,
-    "Earliest (verified)": s.earliest_verified, "Terms of use": M.TERMS[s.provider],
-} for s in M.SERIES.values()]), hide_index=True, width="stretch", row_height=TABLE_ROW_PX,
-   column_config={
-    "Terms of use": st.column_config.TextColumn(width="large")})
-
-# --- Rates, liquidity and FX source audit (live, scripts/source_audit.py) ----------------
-AUDIT = pathlib.Path(__file__).resolve().parent.parent / "data" / "source_audit.json"
-st.markdown("**Source audit: rates, liquidity and FX.** Official public providers only, each "
-            "fetched live from the development machine by `scripts/source_audit.py` "
-            "(full raw first lines in `data/source_audit.md`).")
+# --- Data sources: every source the app uses, in one table ---------------------------------
+st.subheader("Data sources")
+st.markdown("Every source the app uses: where it is used, its URL, frequency, verified earliest "
+            "date, terms and status. Rates, liquidity and FX rows come from the live audit run by "
+            "`scripts/source_audit.py` (raw first lines in `data/source_audit.md`); Markets rows "
+            "show their last fetch on this machine. Load order everywhere: live, then cache "
+            "(`data/cache/`, git-ignored), then an error on the page.")
 try:
-    audit = json.loads(AUDIT.read_text(encoding="utf-8"))
-    st.caption(f"Audit run at {audit['run_at'].replace('T', ' ')}.")
-    st.dataframe(pd.DataFrame([{
-        "Series": r["name"], "Source": r["source"], "Works": "yes" if r.get("works") else "NO",
-        "Frequency": r["frequency"], "Earliest": r.get("earliest", "-"),
-        "Latest": r.get("latest", "-"), "Rows": r.get("rows"),
-        "Terms": ("TERMS UNVERIFIED. " if r["terms_unverified"] else "") + r["terms"],
-    } for r in audit["series"]]), hide_index=True, width="stretch", row_height=TABLE_ROW_PX,
-        column_config={"Terms": st.column_config.TextColumn(width="large"),
-                       "Rows": st.column_config.NumberColumn(format="%d")})
+    audit = SRC.read_audit()
+    st.caption(f"Audit run at {audit['run_at'].replace('T', ' ')}. Yahoo Finance (FTSE 100, "
+               "S&P 500) is not an official provider; its rows say so.")
+    st.dataframe(SRC.source_table(audit), hide_index=True, width="stretch",
+                 row_height=TABLE_ROW_PX, height=560,
+                 column_config={"Series": st.column_config.TextColumn(width="medium"),
+                                "Frequency": st.column_config.TextColumn(width="small"),
+                                "Earliest": st.column_config.TextColumn(width="small"),
+                                "Status": st.column_config.TextColumn(width="large"),
+                                "Terms": st.column_config.TextColumn(width="large"),
+                                "URL": st.column_config.TextColumn(width="medium")})
     st.markdown("**Tried and not used:**")
-    st.dataframe(pd.DataFrame([{"Source": n["name"], "URL": n["url"], "Result": n["status"]}
-                               for n in audit["not_used"]]),
-                 hide_index=True, width="stretch", row_height=TABLE_ROW_PX)
+    st.dataframe(SRC.not_used_table(audit), hide_index=True, width="stretch",
+                 row_height=TABLE_ROW_PX)
 except (OSError, ValueError, KeyError) as e:
     st.error(f"Source audit file not readable ({e}). Run scripts/source_audit.py.")
+st.markdown("**Charts dropped or not built** (no free official data, nothing substituted): UK "
+            "2s10s (no Bank of England 2y nominal yield); France and Italy 2s10s (no free official "
+            "daily or monthly 2y); euro policy rate versus €STR (not built: the ECB deposit rate "
+            "series was not audited). France-Germany and Italy-Germany 10y spreads are MONTHLY. "
+            "Official euro excess liquidity exists only from 27 Sep 2024; the longer line is "
+            "DF + CA − MLF, labelled as not excess liquidity.")
 
+st.subheader("Assumptions")
 df = read_assumptions()
 c1, c2 = st.columns([2, 3])
 status = c1.multiselect("Status", ["VERIFIED", "UNVERIFIED", "n/a"],
