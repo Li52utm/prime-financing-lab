@@ -21,8 +21,9 @@ st.info("Every preset and shock here is **hypothetical**: an own assumption chos
 # --- Presets ------------------------------------------------------------------------------
 st.subheader("Stress presets (hypothetical)")
 names = [p.name for p in all_presets()]
-c1, c2, c3 = st.columns([2, 3, 2])
-name = c1.selectbox("Preset", names, format_func=lambda n: get_preset(n).label, key="preset")
+c1, c2, c3 = st.columns([3, 4, 3])
+name = c1.selectbox("Preset", names, format_func=lambda n: get_preset(n).label.replace(" (hypothetical)", ""),
+                   key="preset")  # section heading and caption say hypothetical
 view = c2.radio("Horizon", list(VIEW_LABELS), format_func=VIEW_LABELS.get, key="view")
 pb_rep = c3.slider("PB repriced (% of client shock)", 0, 100, 0, step=25, key="pb_rep") / 100
 p = get_preset(name)
@@ -33,17 +34,18 @@ st.caption(f"**{p.label}: {VIEW_LABELS[view]}.** Client spread +{p.client_spread
 s = stress_comparison(x, c, p, pb_repriced=pb_rep, view=view)
 table(pd.DataFrame({
     "Route": s["route"],
-    "Dealer net base (GBP)": s["dealer_net_base"],
-    "Dealer net stressed (GBP)": s["dealer_net_stressed"],
-    "Street shock cost (GBP)": s["street_shock_cost"],
-    "Client repricing (GBP)": s["client_repricing_income"],
-    "RoLE stressed (bp)": s["role_stressed"] * 1e4,
-    "k stressed (bp)": s["k_stressed"] * 1e4,
-    "Req. spread stressed (bp)": s["required_spread_role_stressed"] * 1e4,
+    "Net base": s["dealer_net_base"],
+    "Net stressed": s["dealer_net_stressed"],
+    "Street shock": s["street_shock_cost"],
+    "Client repricing": s["client_repricing_income"],
+    "RoLE": s["role_stressed"] * 1e4,
+    "k": s["k_stressed"] * 1e4,
+    "Req. spread": s["required_spread_role_stressed"] * 1e4,
     "Clears": s["clears_role_hurdle_stressed"].map({True: "Yes", False: "No"}),
-}), {"Dealer net base (GBP)": "gbp", "Dealer net stressed (GBP)": "gbp",
-     "Street shock cost (GBP)": "gbp", "Client repricing (GBP)": "gbp", "RoLE stressed (bp)": "bp",
-     "k stressed (bp)": "bp", "Req. spread stressed (bp)": "bp"})
+}), {"Net base": "gbp", "Net stressed": "gbp", "Street shock": "gbp", "Client repricing": "gbp",
+     "RoLE": "bp", "k": "bp", "Req. spread": "bp"})
+st.caption("Dealer net, street shock cost and client repricing in GBP over the tenor; stressed "
+           "RoLE, stressed k and the required spread in bp.")
 explain("stressed dealer net", f"""
 k, street haircut and gilt borrow shocks apply for the whole tenor. The street spread shock is
 charged for **{int(s['street_shock_days'].iloc[0])} days** and the client repricing credited for

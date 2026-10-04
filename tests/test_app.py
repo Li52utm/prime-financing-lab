@@ -353,8 +353,10 @@ def test_markets_live_mode(monkeypatch):
     at = open_page("Markets")
     assert not at.exception, [e.value for e in at.exception]
     labels = [m.label for m in at.metric]
-    assert labels == ["Last (index points)", "Daily change", "1Y return", "1Y volatility",
-                      "Max drawdown (1Y)", "Position in bands (%b)"]
+    assert labels == ["Last", "Daily change", "1Y return", "1Y volatility", "Max drawdown",
+                      "Band position"]
+    assert any(c.value.startswith("Last in index points. Max drawdown over the selected range (1Y)")
+               for c in at.caption)
     stamps = [c.value for c in at.caption if c.value.startswith("Source:")]
     assert len(stamps) == 3 and all("status live" in s and "as of 02 Oct 2026" in s for s in stamps)
     spec = json.loads(chart_specs(at)[0])

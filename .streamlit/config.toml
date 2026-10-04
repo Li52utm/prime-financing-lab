@@ -9,7 +9,7 @@ linkColor = "#3ddc84"
 font = "ui-monospace, 'Cascadia Mono', 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, 'Liberation Mono', monospace"
 headingFont = "ui-monospace, 'Cascadia Mono', 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, 'Liberation Mono', monospace"
 codeFont = "ui-monospace, 'Cascadia Mono', 'Cascadia Code', Consolas, 'SFMono-Regular', Menlo, 'Liberation Mono', monospace"
-baseFontSize = 13
+baseFontSize = 16  # tables render at 0.875 x base = 14px
 baseRadius = "none"
 borderColor = "#2a2e2a"
 dataframeBorderColor = "#2a2e2a"
@@ -17,7 +17,7 @@ showWidgetBorder = true
 showSidebarBorder = true
 chartCategoricalColors = ["#25a85c", "#ffc247", "#6dd3ff", "#d77ee8", "#c9ccc6", "#ff8a5c", "#4f7fae"]
 dataframeHeaderBackgroundColor = "#1c1f1c"
-metricValueFontSize = "1.45rem"
+metricValueFontSize = "1.65rem"
 # Semantic colours used by alerts, metric deltas and :colour[] text: palette only (no red/blue).
 greenColor = "#3ddc84"
 greenTextColor = "#3ddc84"

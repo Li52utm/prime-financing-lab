@@ -63,17 +63,17 @@ with c1:
                            marker_color=[ROUTE_COLORS[r] for r in ROUTES],
                            marker_pattern_shape=[ROUTE_PATTERNS[r] for r in ROUTES],
                            hovertemplate="%{x}: %{y:.1f} bp<extra></extra>"))
-    fig.add_hline(y=x.shadow_cost_k * 1e4, line={"color": MUTED, "dash": "dash", "width": 1},
+    fig.add_hline(y=x.shadow_cost_k * 1e4, line={"color": MUTED, "dash": "dash", "width": 1.5},
                   annotation_text=f"k {pct(x.shadow_cost_k)}", annotation_position="top left")
-    show(style(fig, "Return on leverage exposure vs k", y_title="bp (annualised)", height=340))
+    show(style(fig, "Return on leverage exposure vs k", y_title="bp (annualised)", height=420))
 with c2:
     fig = go.Figure(go.Bar(x=ROUTES, y=[cap.loc[r, "rorwa"] * 100 for r in ROUTES],
                            marker_color=[ROUTE_COLORS[r] for r in ROUTES],
                            marker_pattern_shape=[ROUTE_PATTERNS[r] for r in ROUTES],
                            hovertemplate="%{x}: %{y:.2f}%<extra></extra>"))
-    fig.add_hline(y=c.target_rorwa * 100, line={"color": MUTED, "dash": "dash", "width": 1},
+    fig.add_hline(y=c.target_rorwa * 100, line={"color": MUTED, "dash": "dash", "width": 1.5},
                   annotation_text=f"target {pct(c.target_rorwa)}", annotation_position="top left")
-    show(style(fig, "Return on RWA vs target", y_title="% (annualised)", height=340))
+    show(style(fig, "Return on RWA vs target", y_title="% (annualised)", height=420))
 
 # --- Quoted vs required spread --------------------------------------------------------
 st.subheader("Quoted vs required spread")
@@ -92,7 +92,7 @@ for route in ROUTES:
                             "color": ROUTE_COLORS[route], "symbol": ROUTE_SYMBOLS[route]},
                     name=route, hovertemplate="%{text}: %{x:.1f} bp<extra>" + route + "</extra>")
 style(fig, "Quoted spread against the spread each target needs (binding marker larger)",
-      x_title="bp over SONIA (upgrade: fee)", height=360)
+      x_title="bp over SONIA (upgrade: fee)", height=430)
 fig.update_yaxes(range=[-0.7, 2.7])  # headroom so labels on the outer rows are not clipped
 show(fig)
 explain("required spreads", "Each required spread solves dealer net = target × denominator × τ, "
@@ -107,9 +107,9 @@ fig = go.Figure()
 fig.add_scatter(x=im["im_remuneration_spread"] * 1e4, y=im["role"] * 1e4, mode="lines+markers",
                 name="TRS RoLE", **route_line("TRS"),
                 hovertemplate="IM at SONIA − %{x:.0f} bp<br>RoLE %{y:.1f} bp<extra></extra>")
-fig.add_hline(y=x.shadow_cost_k * 1e4, line={"color": MUTED, "dash": "dash", "width": 1},
+fig.add_hline(y=x.shadow_cost_k * 1e4, line={"color": MUTED, "dash": "dash", "width": 1.5},
               annotation_text=f"k {pct(x.shadow_cost_k)}", annotation_position="top left")
-fig.add_vline(x=x.im_remuneration_spread * 1e4, line={"color": MUTED, "dash": "dot", "width": 1},
+fig.add_vline(x=x.im_remuneration_spread * 1e4, line={"color": MUTED, "dash": "dot", "width": 1.5},
               annotation_text="current", annotation_position="bottom right")
 show(style(fig, "TRS return on leverage exposure by IM remuneration spread",
            x_title="IM remuneration: SONIA minus (bp)", y_title="RoLE (bp)"))

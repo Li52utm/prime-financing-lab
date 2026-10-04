@@ -96,10 +96,9 @@ def render_ticket() -> Context:
     asset_class = sb.selectbox("Asset class", list(ASSET_LABELS), format_func=ASSET_LABELS.get,
                                index=list(ASSET_LABELS).index(A.DEFAULT_ASSET_CLASS),
                                key="asset_class")
-    c1, c2 = sb.columns(2)
-    dividend_pct = c1.number_input("Dividend (% of N)", min_value=0.0, max_value=20.0,
+    dividend_pct = sb.number_input("Dividend (% of N)", min_value=0.0, max_value=20.0,
                                    value=A.DIVIDEND * 100, step=0.1, key="dividend_pct")
-    ex_div_day = c2.number_input("Ex-div day", min_value=0, max_value=365, value=A.EX_DIV_DAY,
+    ex_div_day = sb.number_input("Ex-div day", min_value=0, max_value=365, value=A.EX_DIV_DAY,
                                  step=1, key="ex_div_day")
     sdrt = sb.toggle("Include SDRT (0.5%)", value=A.INCLUDE_SDRT, key="sdrt")
     holding = sb.number_input("Holding period (days, SDRT amortisation)", min_value=1,

@@ -4,7 +4,7 @@ import streamlit as st
 from data import markets as M
 
 from ui.assumptions_reader import PATH, read_assumptions
-from ui.common import page_header
+from ui.common import TABLE_ROW_PX, page_header
 from ui.ticket import get_ctx
 
 ctx = get_ctx()
@@ -31,7 +31,8 @@ st.markdown("**Market data sources (Markets page).** Each was fetched and checke
 st.dataframe(pd.DataFrame([{
     "Series": s.name, "Source": s.source, "Code": s.code,
     "Earliest (verified)": s.earliest_verified, "Terms of use": M.TERMS[s.provider],
-} for s in M.SERIES.values()]), hide_index=True, width="stretch", column_config={
+} for s in M.SERIES.values()]), hide_index=True, width="stretch", row_height=TABLE_ROW_PX,
+   column_config={
     "Terms of use": st.column_config.TextColumn(width="large")})
 
 df = read_assumptions()
@@ -46,7 +47,8 @@ if query:
     view = view[mask]
 counts = df["Status"].value_counts()
 st.caption(" · ".join(f"{k}: {counts.get(k, 0)}" for k in ["VERIFIED", "UNVERIFIED", "n/a"]))
-st.dataframe(view, hide_index=True, width="stretch", height=620, column_config={
+st.dataframe(view, hide_index=True, width="stretch", height=620, row_height=TABLE_ROW_PX,
+             column_config={
     "Source / comment": st.column_config.TextColumn(width="large"),
     "Value": st.column_config.TextColumn(width="medium"),
 })

@@ -7,7 +7,7 @@ import streamlit as st
 import assumptions as A
 from engine.financing import breakeven_trs_spread, pb_route, trs_route, upgrade_route
 from ui.common import (
-    INK, MUTED, OTHER_COLORS, ROUTE_COLORS, ROUTES, bp, explain, gbp, over_sonia_bp,
+    AXIS, INK, MUTED, OTHER_COLORS, ROUTE_COLORS, ROUTES, bp, explain, gbp, over_sonia_bp,
     label, page_header, pct, route_line, show, sonia_label, style, table,
 )
 from ui.ticket import get_ctx
@@ -79,7 +79,7 @@ fig = go.Figure(go.Waterfall(
     increasing={"marker": {"color": ROUTE_COLORS[route]}},
     decreasing={"marker": {"color": OTHER_COLORS[2]}},
     totals={"marker": {"color": MUTED}},
-    connector={"line": {"color": "#383835", "width": 1}},
+    connector={"line": {"color": AXIS, "width": 1.5}},
     hovertemplate="%{x}: £%{y:,.0f}<extra></extra>",
 ))
 show(style(fig, f"{route}: client cost over {x.tenor_days} days (GBP)", y_title="GBP"))
@@ -105,7 +105,7 @@ fig.add_scatter(x=[be * 1e4], y=[over_sonia_bp(fins["PB"].net_cost, x)], mode="m
                 name="Breakeven vs PB", marker={"size": 11, "color": INK, "symbol": "x"},
                 text=[f"{be * 1e4:.0f} bp"], textposition="top center",
                 hovertemplate="breakeven %{x:.1f} bp<extra></extra>")
-fig.add_vline(x=x.trs_spread * 1e4, line={"color": MUTED, "dash": "dash", "width": 1},
+fig.add_vline(x=x.trs_spread * 1e4, line={"color": MUTED, "dash": "dash", "width": 1.5},
               annotation_text="quoted", annotation_position="top")
 show(style(fig, "Client net cost against TRS spread", x_title="TRS spread (bp over SONIA)",
            y_title="Net cost (bp over SONIA)"))

@@ -7,6 +7,13 @@ import streamlit as st
 import assumptions as A
 
 SUBTITLE = "Illustrative, not a regulatory calculation"
+# Readability (display only): chart text >= 14px, hover 15px, thicker lines, larger markers.
+CHART_TEXT_PX = 14
+CHART_TITLE_PX = 17
+CHART_HOVER_PX = 15
+LINE_WIDTH = 3
+MARKER_PX = 10
+TABLE_ROW_PX = 38  # dense but legible at 14px table text
 PLACEHOLDER_BANNER = (
     "Default spreads and the balance-sheet charge k are placeholder assumptions, "
     "not market levels."
@@ -20,7 +27,7 @@ SURFACE = "#151715"  # panels and chart background
 PANEL_2 = "#1c1f1c"
 INK = "#e4e6e1"
 INK_2 = "#b9bdb5"
-MUTED = "#8b9088"
+MUTED = "#a1a69c"  # >= 6.4:1 on every panel background
 GRID = "#232723"
 AXIS = "#343934"
 ACCENT = "#3ddc84"  # UI accent: headings, key metrics, active states (not used for series)
@@ -50,15 +57,16 @@ MKT = {
 }
 
 
-def route_line(route: str, width: int = 2) -> dict:
+def route_line(route: str, width: float = LINE_WIDTH) -> dict:
     """Line and marker styling for a route series: colour + dash + marker shape."""
     return {"line": {"color": ROUTE_COLORS[route], "width": width, "dash": ROUTE_DASHES[route]},
-            "marker": {"color": ROUTE_COLORS[route], "symbol": ROUTE_SYMBOLS[route], "size": 8}}
+            "marker": {"color": ROUTE_COLORS[route], "symbol": ROUTE_SYMBOLS[route],
+                       "size": MARKER_PX}}
 
 
-def other_line(i: int, width: int = 2) -> dict:
+def other_line(i: int, width: float = LINE_WIDTH) -> dict:
     return {"line": {"color": OTHER_COLORS[i], "width": width, "dash": OTHER_DASHES[i]},
-            "marker": {"color": OTHER_COLORS[i], "symbol": OTHER_SYMBOLS[i], "size": 8}}
+            "marker": {"color": OTHER_COLORS[i], "symbol": OTHER_SYMBOLS[i], "size": MARKER_PX}}
 
 
 _ACRONYMS = {"sonia": "SONIA", "sdrt": "SDRT", "im": "IM", "pb": "PB", "trs": "TRS",
@@ -172,7 +180,8 @@ def table(df: pd.DataFrame, formats: dict[str, str] | None = None, height: int |
         if kind == "gbp":
             df[col] = df[col].astype(float).round(0)
         config[col] = st.column_config.NumberColumn(col, format=_FORMATS[kind])
-    kwargs = {"hide_index": True, "width": "stretch", "column_config": config}
+    kwargs = {"hide_index": True, "width": "stretch", "column_config": config,
+              "row_height": TABLE_ROW_PX}
     if height:
         kwargs["height"] = height
     st.dataframe(df, **kwargs)
@@ -185,32 +194,42 @@ MONO = ('ui-monospace, "Cascadia Mono", "Cascadia Code", Consolas, "SFMono-Regul
 
 
 def style(fig: go.Figure, title: str, x_title: str | None = None,
-          y_title: str | None = None, height: int = 380) -> go.Figure:
+          y_title: str | None = None, height: int = 460) -> go.Figure:
     """One look for every chart: terminal palette, monospace, the 'Illustrative' subtitle,
     legend below the plot so it never collides with the title block."""
     fig.update_layout(
         template="plotly_dark",
         title={"text": title.upper(), "subtitle": {"text": SUBTITLE,
-                                                  "font": {"color": MUTED, "size": 11}},
-               "font": {"color": ACCENT, "size": 13}, "x": 0, "xanchor": "left",
+                                                  "font": {"color": MUTED,
+                                                           "size": CHART_TEXT_PX}},
+               "font": {"color": ACCENT, "size": CHART_TITLE_PX}, "x": 0, "xanchor": "left",
                "y": 0.97, "yanchor": "top"},
         paper_bgcolor=SURFACE,
         plot_bgcolor=SURFACE,
-        font={"family": MONO, "color": INK_2, "size": 11},
+        font={"family": MONO, "color": INK_2, "size": CHART_TEXT_PX},
         height=height,
-        margin={"l": 64, "r": 24, "t": 74, "b": 86},
-        legend={"orientation": "h", "yanchor": "top", "y": -0.2, "xanchor": "left", "x": 0,
-                "bgcolor": "rgba(0,0,0,0)", "font": {"color": INK_2}},
+        margin={"l": 76, "r": 28, "t": 92, "b": 132},
+        # Legend sits at the bottom of the figure container (in the margin), so it cannot
+        # collide with the x-axis title however many rows it wraps to.
+        legend={"orientation": "h", "yref": "container", "yanchor": "bottom", "y": 0.01,
+                "xanchor": "left", "x": 0,
+                "bgcolor": "rgba(0,0,0,0)", "font": {"color": INK_2, "size": CHART_TEXT_PX},
+                "itemwidth": 40},
         hoverlabel={"bgcolor": PANEL_2, "bordercolor": ACCENT,
-                    "font": {"color": INK, "family": MONO}},
+                    "font": {"color": INK, "family": MONO, "size": CHART_HOVER_PX}},
         bargap=0.35,
         barcornerradius=0,
     )
     axis = {"gridcolor": GRID, "zerolinecolor": AXIS, "linecolor": AXIS, "showline": True,
-            "tickfont": {"color": MUTED}, "title": {"font": {"color": INK_2}}}
+            "tickfont": {"color": MUTED, "size": CHART_TEXT_PX},
+            "title": {"font": {"color": INK_2, "size": CHART_TEXT_PX}}}
     fig.update_xaxes(**axis, title_text=x_title)
     fig.update_yaxes(**axis, title_text=y_title)
-    fig.update_annotations(font={"color": INK_2, "family": MONO, "size": 11})
+    fig.update_annotations(font={"color": INK_2, "family": MONO, "size": CHART_TEXT_PX})
+    # Reserve bottom space for the legend only when one is drawn (more than one listed trace)
+    listed = [tr for tr in fig.data if tr.showlegend is not False]
+    if len(listed) <= 1 or fig.layout.showlegend is False:
+        fig.update_layout(margin={"b": 72})
     return fig
 
 

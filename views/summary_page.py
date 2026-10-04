@@ -8,7 +8,7 @@ import assumptions as A
 from engine.capital import best_for_desk, capital_comparison, k_sensitivity, role_grid
 from engine.financing import breakeven_trs_spread, pb_route, trs_route, upgrade_route
 from ui.common import (
-    DIVERGING, INK, MUTED, ROUTE_COLORS, ROUTE_DASHES, ROUTES, SURFACE, bp,
+    CHART_TEXT_PX, DIVERGING, INK, MUTED, ROUTE_COLORS, ROUTE_DASHES, ROUTES, SURFACE, bp,
     clearance_sentence, explain, gbp, over_sonia_bp, page_header, pct, route_line, show, style,
     table, tag,
 )
@@ -66,19 +66,22 @@ Leverage exposure is illustrative (PRA Leverage Ratio (CRR) Art 429b/429c/429e);
 
 # --- One table, three routes -------------------------------------------------------
 st.subheader("All routes")
-rows = []
+desk_rows, client_rows = [], []
 for route in ROUTES:
     r, f = cap.loc[route], fins[route]
-    rows.append({
+    desk_rows.append({
         "Route": route,
-        "Break-even k (bp)": r["break_even_k"] * 1e4,
-        "k (bp)": k * 1e4,
-        "Clears k": "Yes" if r["clears_role_hurdle"] else "No",
-        "Quoted (bp)": r["current_spread"] * 1e4,
-        "Req. RoLE (bp)": r["required_spread_role"] * 1e4,
-        "Req. RoRWA (bp)": r["required_spread_rorwa"] * 1e4,
+        "Break-even k": r["break_even_k"] * 1e4,
+        "k": k * 1e4,
+        "Clears": "Yes" if r["clears_role_hurdle"] else "No",
+        "Quoted": r["current_spread"] * 1e4,
+        "Req. RoLE": r["required_spread_role"] * 1e4,
+        "Req. RoRWA": r["required_spread_rorwa"] * 1e4,
         "Binding": r["binding"],
-        "Cushion (bp)": r["role_hurdle_cushion_bp"],
+        "Cushion": r["role_hurdle_cushion_bp"],
+    })
+    client_rows.append({
+        "Route": route,
         "Client fin. bp/SONIA": over_sonia_bp(f.financing_cost, x),
         "Client net bp/SONIA": over_sonia_bp(f.net_cost, x),
         "Dealer net (GBP)": r["dealer_net_gbp"],
@@ -86,11 +89,14 @@ for route in ROUTES:
         "RWA (GBP m)": r["rwa_gbp"] / 1e6,
         "RoRWA (%)": r["rorwa"] * 100,
     })
-table(pd.DataFrame(rows), {
-    "Break-even k (bp)": "bp", "k (bp)": "bp", "Quoted (bp)": "bp", "Req. RoLE (bp)": "bp",
-    "Req. RoRWA (bp)": "bp", "Cushion (bp)": "bp", "Client fin. bp/SONIA": "bp",
-    "Client net bp/SONIA": "bp", "Dealer net (GBP)": "gbp", "Leverage (GBP m)": "m",
-    "RWA (GBP m)": "m", "RoRWA (%)": "pct"})
+# Two tables so every column fits at laptop width (no horizontal scrolling)
+table(pd.DataFrame(desk_rows), {
+    "Break-even k": "bp", "k": "bp", "Quoted": "bp", "Req. RoLE": "bp", "Req. RoRWA": "bp",
+    "Cushion": "bp"})
+st.caption("Desk table: break-even k, k, quoted, required spreads and cushion all in bp.")
+table(pd.DataFrame(client_rows), {
+    "Client fin. bp/SONIA": "bp", "Client net bp/SONIA": "bp", "Dealer net (GBP)": "gbp",
+    "Leverage (GBP m)": "m", "RWA (GBP m)": "m", "RoRWA (%)": "pct"})
 st.caption("Quoted spread for the upgrade is the upgrade fee. Client costs are annualised per "
            "GBP of notional, shown as bp over SONIA. Binding = the higher required spread of the "
            f"RoLE (k) and RoRWA ({pct(c.target_rorwa)}) targets.")
@@ -132,9 +138,9 @@ for route in ROUTES:
     fig.add_scatter(x=[ks["k"].min() * 100, ks["k"].max() * 100],
                     y=[cap.loc[route, "current_spread"] * 1e4] * 2, name=f"{route} quoted",
                     mode="lines", opacity=0.85,
-                    line={"color": ROUTE_COLORS[route], "width": 1, "dash": ROUTE_DASHES[route]},
+                    line={"color": ROUTE_COLORS[route], "width": 1.8, "dash": ROUTE_DASHES[route]},
                     hovertemplate="quoted %{y:.1f} bp<extra>" + route + "</extra>")
-fig.add_vline(x=k * 100, line={"color": MUTED, "width": 1, "dash": "dash"},
+fig.add_vline(x=k * 100, line={"color": MUTED, "width": 1.5, "dash": "dash"},
               annotation_text=f"k = {pct(k)}", annotation_position="top")
 show(style(fig, "Required spread for RoLE = k vs quoted (thin line)",
            x_title="Balance-sheet charge k (%)", y_title="Spread / fee (bp)"))
@@ -178,7 +184,7 @@ for route in ROUTES:
 finite = np.concatenate([v[np.isfinite(v)] for v in grids.values()] or [np.array([1.0])])
 zmax = float(np.nanmax(np.abs(finite))) if finite.size else 1.0  # one shared, symmetric scale
 
-fig = make_subplots(rows=1, cols=3, shared_yaxes=True, horizontal_spacing=0.04,
+fig = make_subplots(rows=1, cols=3, shared_yaxes=True, horizontal_spacing=0.075,
                     subplot_titles=[f"{r} ({'fee' if r == 'Collateral upgrade' else 'spread'})"
                                     for r in ROUTES])
 for i, route in enumerate(ROUTES, start=1):
@@ -204,12 +210,14 @@ for i, route in enumerate(ROUTES, start=1):
         hovertemplate=(f"current: {row['current_spread'] * 1e4:.1f} bp, k {k * 1e4:.0f} bp"
                        "<extra>" + route + "</extra>")), row=1, col=i)
 style(fig, "RoLE minus k by spread and k (green clears, violet misses, white line = 0)",
-      height=430)
+      height=500)
 fig.update_xaxes(range=[s_min, s_max], title_text="Client spread (bp)")
 fig.update_yaxes(range=[k_min, k_max])
 fig.update_yaxes(title_text="k (bp)", row=1, col=1)
 fig.update_layout(coloraxis={"colorscale": DIVERGING, "cmin": -zmax, "cmax": zmax, "cmid": 0,
-                             "colorbar": {"title": {"text": "RoLE − k (bp)"}, "thickness": 12,
+                             "colorbar": {"title": {"text": "RoLE − k (bp)",
+                                                    "font": {"size": CHART_TEXT_PX}},
+                                          "tickfont": {"size": CHART_TEXT_PX}, "thickness": 14,
                                           "outlinewidth": 0}},
                   plot_bgcolor=SURFACE, margin={"t": 115})
 show(fig)

@@ -69,7 +69,7 @@ def stacked(parts_by_route: dict, groups: dict, default: str, title: str, y_titl
                     marker_line={"color": SURFACE, "width": 2},
                     hovertemplate="%{x}<br>" + g + ": £%{y:.2f}m<extra></extra>")
     fig.update_layout(barmode="stack")
-    show(style(fig, title, y_title=y_title, height=360))
+    show(style(fig, title, y_title=y_title, height=440))
 
 
 c1, c2 = st.columns(2)
@@ -130,9 +130,9 @@ fig = go.Figure()
 fig.add_scatter(x=pbm["pb_margin"] * 100, y=pbm["rwa"] / 1e6, mode="lines", name="RWA",
                 line=route_line("PB")["line"],
                 hovertemplate="margin %{x:.0f}%<br>RWA £%{y:.2f}m<extra></extra>")
-fig.add_vline(x=h_pb * 100, line={"color": MUTED, "dash": "dash", "width": 1},
+fig.add_vline(x=h_pb * 100, line={"color": MUTED, "dash": "dash", "width": 1.5},
               annotation_text=f"supervisory haircut {pct(h_pb, 1)}", annotation_position="top right")
-fig.add_vline(x=x.pb_margin * 100, line={"color": MUTED, "dash": "dot", "width": 1},
+fig.add_vline(x=x.pb_margin * 100, line={"color": MUTED, "dash": "dot", "width": 1.5},
               annotation_text=f"margin {pct(x.pb_margin, 0)}", annotation_position="top left")
 show(style(fig, "PB RWA by client margin", x_title="Client margin (% of notional)",
            y_title="RWA (GBP m)"))

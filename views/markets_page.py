@@ -76,13 +76,15 @@ dd_txt = f"{range_dd:.0f} bp" if y else f"{range_dd * 100:.1f}%"
 pb = stats["pct_b"]
 where = "above upper band" if pb > 1 else "below lower band" if pb < 0 else "inside the bands"
 cols = st.columns(6)
-cols[0].metric(f"Last ({spec.unit})", fmt_level(stats["last"]))
+cols[0].metric("Last", fmt_level(stats["last"]))
 cols[1].metric("Daily change", chg(stats["daily_change"]))
 cols[2].metric("1Y change" if y else "1Y return", chg(stats["one_year_change"]))
 cols[3].metric("1Y volatility", vol_txt)
-cols[4].metric(f"Max drawdown ({rng})", dd_txt)
-cols[5].metric("Position in bands (%b)", f"{pb * 100:.0f}%", where, delta_color="off",
+cols[4].metric("Max drawdown", dd_txt)
+cols[5].metric("Band position", f"{pb * 100:.0f}%", where, delta_color="off",
                delta_arrow="off")
+st.caption(f"Last in {spec.unit}. Max drawdown over the selected range ({rng}). Band position is "
+           "%b: 0% = lower band, 100% = upper band.")
 st.caption(series.stamp)
 explain("summary strip", f"""
 - **Last / daily change**: latest close and the change from the previous close
@@ -124,8 +126,8 @@ if spec.has_ohlc:
     fig.add_trace(go.Candlestick(
         x=bars.index, open=bars["open"], high=bars["high"], low=bars["low"], close=bars["close"],
         name="Weekly OHLC" if weekly else "Daily OHLC",
-        increasing={"line": {"color": UP, "width": 1}, "fillcolor": UP},
-        decreasing={"line": {"color": DOWN, "width": 1}, "fillcolor": DOWN}),
+        increasing={"line": {"color": UP, "width": 1.3}, "fillcolor": UP},
+        decreasing={"line": {"color": DOWN, "width": 1.3}, "fillcolor": DOWN}),
         row=row["price"], col=1)
     if has_volume:
         up = (bars["close"] >= bars["open"]).to_numpy()
@@ -134,24 +136,24 @@ if spec.has_ohlc:
                              opacity=0.7), row=row["volume"], col=1)
 else:
     fig.add_trace(go.Scatter(x=pc.index, y=pc, name="Close", mode="lines",
-                               line={"color": ACCENT, "width": 1.5}), row=row["price"], col=1)
+                               line={"color": ACCENT, "width": 2.5}), row=row["price"], col=1)
 
 # Bollinger bands (shaded), middle line, moving averages
 fig.add_trace(go.Scatter(x=pv.index, y=pv["upper"], name=f"Bollinger {bb_window}, ±{bb_width:g}σ",
-                           mode="lines", line={"color": MKT["band"], "width": 1}),
+                           mode="lines", line={"color": MKT["band"], "width": 1.8}),
               row=row["price"], col=1)
 fig.add_trace(go.Scatter(x=pv.index, y=pv["lower"], name="Lower band", mode="lines",
-                         showlegend=False, line={"color": MKT["band"], "width": 1},
+                         showlegend=False, line={"color": MKT["band"], "width": 1.8},
                          fill="tonexty", fillcolor=MKT["band_fill"]),
               row=row["price"], col=1)
 fig.add_trace(go.Scatter(x=pv.index, y=pv["mid"], name=f"Band middle (SMA {bb_window})",
-                           mode="lines", line={"color": MKT["band"], "width": 1, "dash": "dot"}),
+                           mode="lines", line={"color": MKT["band"], "width": 1.5, "dash": "dot"}),
               row=row["price"], col=1)
 fig.add_trace(go.Scatter(x=pv.index, y=pv["ma_fast"], name=f"MA {A.MARKETS_MA_FAST}",
-                           mode="lines", line={"color": MKT["ma_fast"], "width": 1.5}),
+                           mode="lines", line={"color": MKT["ma_fast"], "width": 2.5}),
               row=row["price"], col=1)
 fig.add_trace(go.Scatter(x=pv.index, y=pv["ma_slow"], name=f"MA {A.MARKETS_MA_SLOW}",
-                           mode="lines", line={"color": MKT["ma_slow"], "width": 1.5,
+                           mode="lines", line={"color": MKT["ma_slow"], "width": 2.5,
                                                 "dash": "dash"}),
               row=row["price"], col=1)
 # Breach markers: shape and colour both encode the side
@@ -159,28 +161,27 @@ for side, symbol, color, name in ((1, "triangle-down", MKT["above"], "Close abov
                                   (-1, "triangle-up", MKT["below"], "Close below lower band")):
     pts = cv[iv["state"] == side]
     fig.add_trace(go.Scatter(x=pts.index, y=pts, mode="markers", name=name,
-                               marker={"symbol": symbol, "size": 8, "color": color,
+                               marker={"symbol": symbol, "size": 10, "color": color,
                                        "line": {"color": MKT["marker_edge"], "width": 1}}),
                   row=row["price"], col=1)
 
 fig.add_trace(go.Scatter(x=pv.index, y=pv["rsi"], name="RSI", mode="lines", showlegend=False,
-                           line={"color": ACCENT, "width": 1.2}), row=row["rsi"], col=1)
+                           line={"color": ACCENT, "width": 2}), row=row["rsi"], col=1)
 for level in A.MARKETS_RSI_LEVELS:
-    fig.add_hline(y=level, line={"color": MUTED, "dash": "dot", "width": 1}, row=row["rsi"],
+    fig.add_hline(y=level, line={"color": MUTED, "dash": "dot", "width": 1.5}, row=row["rsi"],
                   col=1)
 vol_y = pv["vol"] if y else pv["vol"] * 100
 fig.add_trace(go.Scatter(x=pv.index, y=vol_y, name="Realised vol", mode="lines",
-                           showlegend=False, line={"color": MKT["vol"], "width": 1.2}),
+                           showlegend=False, line={"color": MKT["vol"], "width": 2}),
               row=row["vol"], col=1)
 dd_y = pdd if y else pdd * 100
 fig.add_trace(go.Scatter(x=pdd.index, y=dd_y, name="Drawdown", mode="lines", showlegend=False,
-                         line={"color": MKT["dd"], "width": 1},
+                         line={"color": MKT["dd"], "width": 2},
                          fill="tozeroy", fillcolor=MKT["dd_fill"]),
               row=row["dd"], col=1)
 
-style(fig, f"{spec.name}: level, bands and risk ({rng})", height=980)
-fig.update_layout(xaxis_rangeslider_visible=False, hovermode="x unified",
-                  legend={"y": -0.06})
+style(fig, f"{spec.name}: level, bands and risk ({rng})", height=1120)
+fig.update_layout(xaxis_rangeslider_visible=False, hovermode="x unified")
 fig.update_yaxes(range=[0, 100], row=row["rsi"], col=1)
 if log_axis and not y:
     fig.update_yaxes(type="log", row=row["price"], col=1)
