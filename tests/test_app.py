@@ -23,6 +23,8 @@ PAGES = {
     "Assumptions": "views/assumptions_page.py",
     "Markets": "views/markets_page.py",
     "Rates & Liquidity": "views/rates_page.py",
+    "Glossary": "views/glossary_page.py",
+    "Concept Trainer": "views/trainer_page.py",
 }
 PAGES_WITH_HEADLINES = ["Summary", "Client view", "Desk view", "Capital", "Stress lab"]
 
@@ -46,7 +48,7 @@ def chart_specs(at: AppTest) -> list[str]:
     return [el.proto.spec for el in at.get("plotly_chart")]
 
 
-NO_TICKET_PAGES = {"Markets", "Rates & Liquidity"}  # market data pages: no trade-context banner
+NO_TICKET_PAGES = {"Markets", "Rates & Liquidity", "Glossary", "Concept Trainer"}  # no trade-context banner
 
 
 @pytest.mark.parametrize("page", [p for p in PAGES if p not in NO_TICKET_PAGES])
@@ -481,3 +483,46 @@ def test_rates_error_mode():
     assert not at.exception, [e.value for e in at.exception]
     assert len(at.error) >= 5 and all("no cached copy" in e.value for e in at.error)
     assert not chart_specs(at)
+
+
+# --- Phase 3: Glossary and Concept Trainer ----------------------------------------------------
+
+def test_glossary_lists_every_term_with_links():
+    from content.glossary import TERMS
+    at = open_page("Glossary")
+    assert not at.exception, [e.value for e in at.exception]
+    text = " ".join(m.value for m in at.markdown)
+    for t in TERMS:
+        assert t.name in text
+    at.text_input(key="gl_filter").set_value("repo").run()
+    assert not at.exception
+    shown = " ".join(m.value for m in at.markdown)
+    assert "Reverse repo" in shown and "Haircut" not in shown
+
+
+def test_trainer_flashcards_and_quiz_score():
+    at = open_page("Concept Trainer")
+    assert not at.exception, [e.value for e in at.exception]
+    from content.glossary import PROMPTS
+    assert [e.label for e in at.expander if e.label in PROMPTS.values()] == list(PROMPTS.values())
+    at.selectbox(key="tr_card").set_value("SONIA").run()
+    assert not at.exception
+    ss = at.session_state
+    from content.glossary import quiz_question
+    key, prompt = ss.tr_order[ss.tr_pos]
+    q = quiz_question(key, prompt, seed=ss.tr_seed + ss.tr_pos)
+    at.radio(key="tr_choice").set_value(q["answer"]).run()
+    at.button(key="tr_check").click().run()
+    assert not at.exception
+    assert at.session_state.tr_score == 1 and at.session_state.tr_done == 1
+    assert any("Correct" in s.value for s in at.success)
+    at.button(key="tr_next").click().run()
+    assert at.session_state.tr_pos == 1 and not at.session_state.tr_checked
+    key, prompt = at.session_state.tr_order[1]
+    q = quiz_question(key, prompt, seed=at.session_state.tr_seed + 1)
+    at.radio(key="tr_choice").set_value((q["answer"] + 1) % 4).run()
+    at.button(key="tr_check").click().run()
+    assert at.session_state.tr_score == 1 and at.session_state.tr_done == 2
+    assert at.error
+    at.button(key="tr_reset").click().run()
+    assert at.session_state.tr_done == 0
