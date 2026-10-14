@@ -6,3 +6,7 @@ notes_private/
 data/cache/
 prompts/BUILD_NOTES.md
 data/forecasts/
+
+data/raw/
+_import/
+prompts/
